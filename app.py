@@ -21,8 +21,7 @@ def init_db():
         ''')
         conn.commit()
 
-@app.before_first_request
-def setup():
+
     init_db()
 
 @app.route('/')
