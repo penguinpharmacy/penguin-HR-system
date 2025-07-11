@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>編輯員工</title>
+<link href="/static/style.css" rel="stylesheet">
+</head><body class="p-4">
+  <h1 class="text-xl mb-4">編輯 {{ emp[1] }}</h1>
+  <form method="post">
+    <p><label>留職停薪：<input type="checkbox" name="suspend" {% if emp[4] %}checked{% endif %}></label></p>
+    <p><label>已用特休天數：<input type="number" name="used_leave" value="{{ emp[5] }}"></label></p>
+    <p><button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded">更新</button></p>
+  </form>
+</body></html>

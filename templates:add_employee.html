@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>新增員工</title>
+<link href="/static/style.css" rel="stylesheet">
+</head><body class="p-4">
+  <h1 class="text-xl mb-4">新增員工</h1>
+  <form method="post">
+    <p><label>姓名：<input name="name" required></label></p>
+    <p><label>到職日：<input type="date" name="start_date" required></label></p>
+    <p><label>部門：<input name="department" required></label></p>
+    <p><label><input type="checkbox" name="suspend"> 留職停薪</label></p>
+    <p><label>已用特休天數：<input type="number" name="used_leave" value="0"></label></p>
+    <p><button type="submit" class="px-3 py-1 bg-green-500 text-white rounded">送出</button></p>
+  </form>
+</body></html>
