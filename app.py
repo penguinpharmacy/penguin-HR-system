@@ -2,11 +2,13 @@ from flask import Flask, render_template, request, redirect, url_for
 from models import calculate_seniority, entitled_leave_days
 from datetime import datetime
 import sqlite3
+import os
 
 app = Flask(__name__)
 DB = 'database.db'
 
 def init_db():
+    """建立資料表（若不存在就建立）"""
     with sqlite3.connect(DB) as conn:
         c = conn.cursor()
         c.execute('''
@@ -21,33 +23,41 @@ def init_db():
         ''')
         conn.commit()
 
-
-    init_db()
+# 啟動時先初始化資料庫
+init_db()
 
 @app.route('/')
 def index():
+    """員工特休總覽"""
     with sqlite3.connect(DB) as conn:
         c = conn.cursor()
         c.execute('SELECT * FROM employees')
         rows = c.fetchall()
-    data = []
+
+    employees = []
     for r in rows:
         sid, name, sd, dept, suspend, used = r
         sd_date = datetime.strptime(sd, '%Y-%m-%d').date()
         years, months = calculate_seniority(sd_date)
         entitled = entitled_leave_days(years, months, bool(suspend))
         remaining = max(entitled - used, 0)
-        data.append({
-            'id': sid, 'name': name, 'dept': dept,
-            'years': years, 'months': months,
+        employees.append({
+            'id': sid,
+            'name': name,
+            'dept': dept,
+            'years': years,
+            'months': months,
             'entitled': entitled,
-            'used': used, 'remaining': remaining,
+            'used': used,
+            'remaining': remaining,
             'suspend': bool(suspend)
         })
-    return render_template('index.html', employees=data)
 
-@app.route('/add', methods=['GET','POST'])
+    return render_template('index.html', employees=employees)
+
+@app.route('/add', methods=['GET', 'POST'])
 def add_employee():
+    """新增員工"""
     if request.method == 'POST':
         name = request.form['name']
         start_date = request.form['start_date']
@@ -62,10 +72,12 @@ def add_employee():
             )
             conn.commit()
         return redirect(url_for('index'))
+
     return render_template('add_employee.html')
 
-@app.route('/edit/<int:emp_id>', methods=['GET','POST'])
+@app.route('/edit/<int:emp_id>', methods=['GET', 'POST'])
 def edit_employee(emp_id):
+    """編輯員工：更新留職停薪與已用特休"""
     with sqlite3.connect(DB) as conn:
         c = conn.cursor()
         if request.method == 'POST':
@@ -77,13 +89,14 @@ def edit_employee(emp_id):
             )
             conn.commit()
             return redirect(url_for('index'))
+
         c.execute('SELECT * FROM employees WHERE id=?', (emp_id,))
         r = c.fetchone()
+
     return render_template('edit_employee.html', emp=r)
 
 if __name__ == '__main__':
-    import os
     port = int(os.environ.get('PORT', 5000))
+    # 綁定到 0.0.0.0 並使用指定埠號
     app.run(host='0.0.0.0', port=port)
-
 
