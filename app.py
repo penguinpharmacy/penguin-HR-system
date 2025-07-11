@@ -23,41 +23,36 @@ def init_db():
         ''')
         conn.commit()
 
-# 啟動時先初始化資料庫
-init_db()
-
 @app.route('/')
 def index():
-    """員工特休總覽"""
+    """員工特休總覽，首頁進來先確保有 table"""
+    init_db()
+
     with sqlite3.connect(DB) as conn:
         c = conn.cursor()
         c.execute('SELECT * FROM employees')
         rows = c.fetchall()
 
     employees = []
-    for r in rows:
-        sid, name, sd, dept, suspend, used = r
+    for sid, name, sd, dept, suspend, used in rows:
         sd_date = datetime.strptime(sd, '%Y-%m-%d').date()
         years, months = calculate_seniority(sd_date)
         entitled = entitled_leave_days(years, months, bool(suspend))
         remaining = max(entitled - used, 0)
         employees.append({
-            'id': sid,
-            'name': name,
-            'dept': dept,
-            'years': years,
-            'months': months,
-            'entitled': entitled,
-            'used': used,
-            'remaining': remaining,
-            'suspend': bool(suspend)
+            'id': sid, 'name': name, 'dept': dept,
+            'years': years, 'months': months,
+            'entitled': entitled, 'used': used,
+            'remaining': remaining, 'suspend': bool(suspend)
         })
 
     return render_template('index.html', employees=employees)
 
 @app.route('/add', methods=['GET', 'POST'])
 def add_employee():
-    """新增員工"""
+    """新增員工前也先確保有 table"""
+    init_db()
+
     if request.method == 'POST':
         name = request.form['name']
         start_date = request.form['start_date']
@@ -77,7 +72,9 @@ def add_employee():
 
 @app.route('/edit/<int:emp_id>', methods=['GET', 'POST'])
 def edit_employee(emp_id):
-    """編輯員工：更新留職停薪與已用特休"""
+    """編輯員工前也先確保有 table"""
+    init_db()
+
     with sqlite3.connect(DB) as conn:
         c = conn.cursor()
         if request.method == 'POST':
@@ -96,7 +93,6 @@ def edit_employee(emp_id):
     return render_template('edit_employee.html', emp=r)
 
 if __name__ == '__main__':
+    # 使用 Render 給的 PORT 啟動
     port = int(os.environ.get('PORT', 5000))
-    # 綁定到 0.0.0.0 並使用指定埠號
     app.run(host='0.0.0.0', port=port)
-
