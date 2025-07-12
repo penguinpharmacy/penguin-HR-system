@@ -72,19 +72,24 @@ def add_employee():
     if request.method == 'POST':
         name = request.form['name']
         start_date = request.form['start_date']
+        end_date = request.form.get('end_date') or ''
         dept = request.form['department']
+        grade = request.form['salary_grade']
         suspend = 1 if request.form.get('suspend') else 0
         used = int(request.form['used_leave'])
         with sqlite3.connect(DB) as conn:
             c = conn.cursor()
             c.execute(
-                'INSERT INTO employees (name, start_date, department, on_leave_suspend, used_leave) VALUES (?,?,?,?,?)',
-                (name, start_date, dept, suspend, used)
+                '''INSERT INTO employees
+                   (name, start_date, end_date, department, salary_grade, on_leave_suspend, used_leave)
+                   VALUES (?,?,?,?,?,?,?)''',
+                (name, start_date, end_date, dept, grade, suspend, used)
             )
             conn.commit()
         return redirect(url_for('index'))
 
     return render_template('add_employee.html')
+
 
 @app.route('/edit/<int:emp_id>', methods=['GET', 'POST'])
 def edit_employee(emp_id):
