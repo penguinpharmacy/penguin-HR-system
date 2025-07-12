@@ -1,11 +1,53 @@
 <!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>編輯員工</title>
-<link href="/static/style.css" rel="stylesheet">
-</head><body class="p-4">
-  <h1 class="text-xl mb-4">編輯 {{ emp[1] }}</h1>
-  <form method="post">
-    <p><label>留職停薪：<input type="checkbox" name="suspend" {% if emp[4] %}checked{% endif %}></label></p>
-    <p><label>已用特休天數：<input type="number" name="used_leave" value="{{ emp[5] }}"></label></p>
-    <p><button type="submit" class="px-3 py-1 bg-blue-600 text-white rounded">更新</button></p>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>編輯員工</title>
+  <link href="/static/style.css" rel="stylesheet">
+</head>
+<body class="p-4">
+  <h1 class="text-2xl mb-4">編輯員工</h1>
+  <form action="/edit/{{ emp[0] }}" method="post" class="space-y-4">
+    <div>
+      <label class="block">姓名：
+        <input type="text" name="name" value="{{ emp[1] }}" required class="border px-2 py-1 w-full">
+      </label>
+    </div>
+    <div>
+      <label class="block">到職日：
+        <input type="date" name="start_date" value="{{ emp[2] }}" required class="border px-2 py-1">
+      </label>
+    </div>
+    <div>
+      <label class="block">離職日（若無可留空）：
+        <input type="date" name="end_date" value="{{ emp[3] }}" class="border px-2 py-1">
+      </label>
+    </div>
+    <div>
+      <label class="block">部門：
+        <input type="text" name="department" value="{{ emp[4] }}" required class="border px-2 py-1 w-full">
+      </label>
+    </div>
+    <div>
+      <label class="block">薪資級距：
+        <input type="text" name="salary_grade" value="{{ emp[5] }}" required class="border px-2 py-1 w-full">
+      </label>
+    </div>
+    <div>
+      <label class="inline-flex items-center">
+        <input type="checkbox" name="suspend" {% if emp[6] %}checked{% endif %} class="mr-2">
+        留職停薪
+      </label>
+    </div>
+    <div>
+      <label class="block">已用特休天數：
+        <input type="number" name="used_leave" value="{{ emp[7] }}" min="0" class="border px-2 py-1 w-24">
+      </label>
+    </div>
+    <div>
+      <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded">儲存</button>
+      <a href="/" class="ml-4 text-gray-600">取消</a>
+    </div>
   </form>
-</body></html>
+</body>
+</html>
