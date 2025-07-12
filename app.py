@@ -64,9 +64,9 @@ def index():
     return render_template('index.html', employees=employees)
 
 
-@app.route('/edit/<int:emp_id>', methods=['GET', 'POST'])
-def edit_employee(emp_id):
-    """編輯員工：更新到職日、離職日、部門、薪資級距、留職停薪與已用特休"""
+@app.route('/add', methods=['GET', 'POST'])
+def add_employee():
+    """新增員工前也先確保有 table"""
     init_db()
 
     if request.method == 'POST':
@@ -76,7 +76,34 @@ def edit_employee(emp_id):
         dept       = request.form['department']
         grade      = request.form['salary_grade']
         suspend    = 1 if request.form.get('suspend') else 0
-        # 如果 used_leave 是空字串就改為 0
+        used       = int(request.form.get('used_leave') or 0)
+
+        with sqlite3.connect(DB) as conn:
+            c = conn.cursor()
+            c.execute(
+                '''INSERT INTO employees
+                   (name, start_date, end_date, department, salary_grade, on_leave_suspend, used_leave)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                (name, start_date, end_date, dept, grade, suspend, used)
+            )
+            conn.commit()
+        return redirect(url_for('index'))
+
+    return render_template('add_employee.html')
+
+
+@app.route('/edit/<int:emp_id>', methods=['GET', 'POST'])
+def edit_employee(emp_id):
+    """編輯員工：更新所有欄位"""
+    init_db()
+
+    if request.method == 'POST':
+        name       = request.form['name']
+        start_date = request.form['start_date']
+        end_date   = request.form.get('end_date') or ''
+        dept       = request.form['department']
+        grade      = request.form['salary_grade']
+        suspend    = 1 if request.form.get('suspend') else 0
         used       = int(request.form.get('used_leave') or 0)
 
         with sqlite3.connect(DB) as conn:
@@ -91,7 +118,6 @@ def edit_employee(emp_id):
             conn.commit()
         return redirect(url_for('index'))
 
-    # GET 時先讀出所有欄位
     with sqlite3.connect(DB) as conn:
         c = conn.cursor()
         c.execute(
@@ -105,28 +131,6 @@ def edit_employee(emp_id):
 
     return render_template('edit_employee.html', emp=r)
 
-
-@app.route('/edit/<int:emp_id>', methods=['GET', 'POST'])
-def edit_employee(emp_id):
-    """編輯員工前也先確保有 table"""
-    init_db()
-
-    with sqlite3.connect(DB) as conn:
-        c = conn.cursor()
-        if request.method == 'POST':
-            used = int(request.form['used_leave'])
-            suspend = 1 if request.form.get('suspend') else 0
-            c.execute(
-                'UPDATE employees SET on_leave_suspend=?, used_leave=? WHERE id=?',
-                (suspend, used, emp_id)
-            )
-            conn.commit()
-            return redirect(url_for('index'))
-
-        c.execute('SELECT * FROM employees WHERE id=?', (emp_id,))
-        r = c.fetchone()
-
-    return render_template('edit_employee.html', emp=r)
 
 if __name__ == '__main__':
     # 使用 Render 給的 PORT 啟動
