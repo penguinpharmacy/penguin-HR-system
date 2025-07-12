@@ -16,7 +16,9 @@ def init_db():
                 id INTEGER PRIMARY KEY,
                 name TEXT,
                 start_date TEXT,
+                end_date TEXT,
                 department TEXT,
+                salary_grade TEXT,
                 on_leave_suspend INTEGER,
                 used_leave INTEGER
             )
@@ -30,21 +32,36 @@ def index():
 
     with sqlite3.connect(DB) as conn:
         c = conn.cursor()
-        c.execute('SELECT * FROM employees')
-        rows = c.fetchall()
+        c.execute('''
+  SELECT id, name, start_date, end_date,
+         department, salary_grade,
+         on_leave_suspend, used_leave
+  FROM employees
+''')
+rows = c.fetchall()
 
     employees = []
-    for sid, name, sd, dept, suspend, used in rows:
-        sd_date = datetime.strptime(sd, '%Y-%m-%d').date()
-        years, months = calculate_seniority(sd_date)
-        entitled = entitled_leave_days(years, months, bool(suspend))
-        remaining = max(entitled - used, 0)
-        employees.append({
-            'id': sid, 'name': name, 'dept': dept,
-            'years': years, 'months': months,
-            'entitled': entitled, 'used': used,
-            'remaining': remaining, 'suspend': bool(suspend)
-        })
+    for sid, name, sd, ed, dept, grade, suspend, used in rows:
+    # 計算邏輯不變
+    sd_date = datetime.strptime(sd, '%Y-%m-%d').date()
+    years, months = calculate_seniority(sd_date)
+    entitled = entitled_leave_days(years, months, bool(suspend))
+    remaining = max(entitled - used, 0)
+    employees.append({
+      'id': sid,
+      'name': name,
+      'start_date': sd,
+      'end_date': ed or '',
+      'department': dept,
+      'salary_grade': grade,
+      'years': years,
+      'months': months,
+      'entitled': entitled,
+      'used': used,
+      'remaining': remaining,
+      'suspend': bool(suspend),
+    })
+
 
     return render_template('index.html', employees=employees)
 
