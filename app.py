@@ -23,7 +23,24 @@ def init_db():
                 used_leave INTEGER
             )
         ''')
+        # 新增：勞健保負擔明細
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS insurances (
+                id INTEGER PRIMARY KEY,
+                employee_id INTEGER UNIQUE,
+                personal_labour INTEGER,
+                personal_health INTEGER,
+                company_labour INTEGER,
+                company_health INTEGER,
+                retirement6 INTEGER,
+                occupational_ins INTEGER,
+                total_company INTEGER,
+                note TEXT,
+                FOREIGN KEY(employee_id) REFERENCES employees(id)
+            )
+        ''')
         conn.commit()
+
 
 @app.route('/')
 def index():
@@ -130,6 +147,71 @@ def edit_employee(emp_id):
         r = c.fetchone()
 
     return render_template('edit_employee.html', emp=r)
+
+@app.route('/insurance')
+def list_insurance():
+    """列出所有員工的保險負擔"""
+    init_db()
+    with sqlite3.connect(DB) as conn:
+        c = conn.cursor()
+        c.execute('''
+            SELECT e.id, e.name,
+                   i.personal_labour, i.personal_health,
+                   i.company_labour, i.company_health,
+                   i.retirement6, i.occupational_ins,
+                   i.total_company, i.note
+            FROM employees e
+            LEFT JOIN insurances i ON e.id = i.employee_id
+        ''')
+        rows = c.fetchall()
+    return render_template('insurance.html', items=rows)
+
+@app.route('/insurance/edit/<int:emp_id>', methods=['GET', 'POST'])
+def edit_insurance(emp_id):
+    """新增或編輯某位員工的保險負擔"""
+    init_db()
+    if request.method == 'POST':
+        vals = [
+            int(request.form.get('personal_labour') or 0),
+            int(request.form.get('personal_health') or 0),
+            int(request.form.get('company_labour') or 0),
+            int(request.form.get('company_health') or 0),
+            int(request.form.get('retirement6') or 0),
+            int(request.form.get('occupational_ins') or 0),
+            int(request.form.get('total_company') or 0),
+            request.form.get('note',''),
+            emp_id
+        ]
+        with sqlite3.connect(DB) as conn:
+            c = conn.cursor()
+            # 如果已存在就更新，否則插入
+            c.execute('SELECT id FROM insurances WHERE employee_id=?', (emp_id,))
+            if c.fetchone():
+                c.execute('''
+                    UPDATE insurances SET
+                      personal_labour=?, personal_health=?,
+                      company_labour=?, company_health=?,
+                      retirement6=?, occupational_ins=?,
+                      total_company=?, note=?
+                    WHERE employee_id=?
+                ''', vals)
+            else:
+                c.execute('''
+                    INSERT INTO insurances
+                    (personal_labour, personal_health,
+                     company_labour, company_health,
+                     retirement6, occupational_ins,
+                     total_company, note, employee_id)
+                    VALUES (?,?,?,?,?,?,?,?,?)
+                ''', vals)
+            conn.commit()
+        return redirect(url_for('list_insurance'))
+    # GET 讀出現有值（若無則全空）
+    with sqlite3.connect(DB) as conn:
+        c = conn.cursor()
+        c.execute('SELECT * FROM insurances WHERE employee_id=?', (emp_id,))
+        r = c.fetchone() or [None, emp_id,0,0,0,0,0,0,0,'']
+    return render_template('edit_insurance.html', emp_id=emp_id, ins=r)
 
 
 if __name__ == '__main__':
