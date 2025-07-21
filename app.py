@@ -6,8 +6,8 @@ import psycopg
 
 app = Flask(__name__)
 def get_conn():
-    """連到 Supabase PostgreSQL"""
-    return psycopg2.connect(os.environ['DATABASE_URL'])
+    # psycopg 3: 而非 psycopg2
+    return psycopg.connect(os.environ['DATABASE_URL'])
     
 def init_db():
     """建立資料表（若不存在就建立）"""
