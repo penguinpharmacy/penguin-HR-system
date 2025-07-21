@@ -101,40 +101,61 @@ def index():
     init_db()
     with get_conn() as conn, conn.cursor() as c:
         c.execute('''
-            SELECT id, name, start_date, end_date, department,
-                   job_level, salary_grade, base_salary, position_allowance,
-                   on_leave_suspend, used_leave,
-                   entitled_sick, used_sick,
-                   entitled_personal, used_personal,
-                   entitled_marriage, used_marriage
-              FROM employees;
+            SELECT 
+                id, name, start_date, end_date, department,
+                job_level, salary_grade, base_salary, position_allowance,
+                on_leave_suspend, used_leave,
+                entitled_sick, used_sick,
+                entitled_personal, used_personal,
+                entitled_marriage, used_marriage
+            FROM employees
         ''')
         rows = c.fetchall()
 
     employees = []
-    for sid, name, sd, ed, dept, grade, suspend, used in rows:
-        # 計算年資：若有離職日，用離職日計算，否則用今天
+    for (sid, name, sd, ed, dept,
+         level, grade, base, allowance,
+         suspend, used,
+         sick_ent, sick_used,
+         per_ent, per_used,
+         mar_ent, mar_used) in rows:
+
+        # 計算年資：若有離職日，用離職日；否則用到職日
         ref_date = ed or sd
         if isinstance(ref_date, str):
             ref_date = datetime.strptime(ref_date, '%Y-%m-%d').date()
         years, months = calculate_seniority(ref_date)
         entitled = entitled_leave_days(years, months, suspend)
+
         employees.append({
             'id': sid,
             'name': name,
             'start_date': sd,
             'end_date': ed or '',
             'department': dept,
+            'job_level': level,
             'salary_grade': grade,
+            'base_salary': base,
+            'position_allowance': allowance,
             'years': years,
             'months': months,
             'entitled': entitled,
             'used': used,
             'remaining': max(entitled - used, 0),
-            'suspend': suspend
+            'suspend': suspend,
+            'entitled_sick': sick_ent,
+            'used_sick': sick_used,
+            'remaining_sick': max(sick_ent - sick_used, 0),
+            'entitled_personal': per_ent,
+            'used_personal': per_used,
+            'remaining_personal': max(per_ent - per_used, 0),
+            'entitled_marriage': mar_ent,
+            'used_marriage': mar_used,
+            'remaining_marriage': max(mar_ent - mar_used, 0),
         })
 
     return render_template('index.html', employees=employees)
+
 
 
 @app.route('/add', methods=['GET', 'POST'])
