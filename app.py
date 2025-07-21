@@ -6,8 +6,17 @@ import psycopg
 
 app = Flask(__name__)
 def get_conn():
-    # psycopg 3: 而非 psycopg2
-    return psycopg.connect(os.environ['DATABASE_URL'])
+    """
+    由環境變數 DATABASE_URL 建立 Postgres 連線，
+    並強制使用 SSL（sslmode=require），避免走 IPv6 失敗
+    """
+    dsn = os.environ['DATABASE_URL']
+    # 如果連線字串裡還沒帶 sslmode，就自動補上
+    if 'sslmode' not in dsn:
+        sep = '&' if '?' in dsn else '?'
+        dsn = dsn + sep + 'sslmode=require'
+    # 回傳連線
+    return psycopg.connect(dsn)
     
 def init_db():
     """建立資料表（若不存在就建立）"""
