@@ -114,11 +114,22 @@ def index():
          sick_ent, sick_used,
          per_ent, per_used,
          mar_ent, mar_used) in rows:
+
+        # 將 None 轉成 0
+        sick_ent   = sick_ent   or 0
+        sick_used  = sick_used  or 0
+        per_ent    = per_ent    or 0
+        per_used   = per_used   or 0
+        mar_ent    = mar_ent    or 0
+        mar_used   = mar_used   or 0
+
+        # 計算年資：若有離職日，用離職日；否則用到職日
         ref_date = ed or sd
         if isinstance(ref_date, str):
             ref_date = datetime.strptime(ref_date, '%Y-%m-%d').date()
         years, months = calculate_seniority(ref_date)
         entitled = entitled_leave_days(years, months, suspend)
+
         employees.append({
             'id': sid,
             'name': name,
@@ -143,8 +154,9 @@ def index():
             'remaining_personal': max(per_ent - per_used, 0),
             'entitled_marriage': mar_ent,
             'used_marriage': mar_used,
-            'remaining_marriage': max(mar_ent - mar_used, 0)
+            'remaining_marriage': max(mar_ent - mar_used, 0),
         })
+
     return render_template('index.html', employees=employees)
 
 @app.route('/add', methods=['GET','POST'])
