@@ -16,10 +16,16 @@
         <th>到職日</th>
         <th>離職日</th>
         <th>薪資級距</th>
+        <th>職等</th>
+        <th>底薪</th>
+        <th>職務津貼</th>
         <th>年資</th>
         <th>應特休</th>
         <th>已用</th>
         <th>剩餘</th>
+        <th>病假剩餘</th>
+        <th>事假剩餘</th>
+        <th>婚假剩餘</th>
         <th>留停</th>
         <th>操作</th>
       </tr>
@@ -32,10 +38,16 @@
         <td>{{ e.start_date }}</td>
         <td>{{ e.end_date or '' }}</td>
         <td>{{ e.salary_grade }}</td>
+        <td>{{ e.job_level }}</td>
+        <td>{{ e.base_salary }}</td>
+        <td>{{ e.position_allowance }}</td>
         <td>{{ e.years }} 年 {{ e.months }} 月</td>
         <td>{{ e.entitled }}</td>
         <td>{{ e.used }}</td>
         <td>{{ e.remaining }}</td>
+        <td>{{ e.remaining_sick }}</td>
+        <td>{{ e.remaining_personal }}</td>
+        <td>{{ e.remaining_marriage }}</td>
         <td>{{ '是' if e.suspend else '否' }}</td>
         <td><a href="/edit/{{ e.id }}" class="text-blue-600">編輯</a></td>
       </tr>
