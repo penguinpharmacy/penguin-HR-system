@@ -35,7 +35,21 @@ def get_conn():
     )
 
 def init_db():
+    """建立或升級 employees / insurances 資料表"""
     with get_conn() as conn, conn.cursor() as c:
+        # 1) 如果已存在舊版 employees，先逐一新增缺少的欄位
+        c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS job_level TEXT;")
+        c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS base_salary INTEGER;")
+        c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS position_allowance INTEGER;")
+        c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS entitled_sick INTEGER;")
+        c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS used_sick INTEGER;")
+        c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS entitled_personal INTEGER;")
+        c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS used_personal INTEGER;")
+        c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS entitled_marriage INTEGER;")
+        c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS used_marriage INTEGER;")
+        conn.commit()
+
+        # 2) 如果還沒資料表就建立完整結構
         c.execute('''
             CREATE TABLE IF NOT EXISTS employees (
                 id SERIAL PRIMARY KEY,
@@ -57,6 +71,13 @@ def init_db():
                 used_marriage INTEGER
             );
         ''')
+        conn.commit()
+
+        # insurances 表也同理
+        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS retirement6 INTEGER;")
+        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS occupational_ins INTEGER;")
+        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS total_company INTEGER;")
+        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS note TEXT;")
         conn.commit()
         c.execute('''
             CREATE TABLE IF NOT EXISTS insurances (
