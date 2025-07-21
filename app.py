@@ -1,10 +1,14 @@
 from flask import Flask, render_template, request, redirect, url_for
 from models import calculate_seniority, entitled_leave_days
 from datetime import datetime
-import sqlite3
 import os
+import psycopg2
 
 app = Flask(__name__)
+def get_conn():
+    """連到 Supabase PostgreSQL"""
+    return psycopg2.connect(os.environ['DATABASE_URL'])
+
 DB = 'database.db'
 
 def init_db():
