@@ -23,6 +23,19 @@ def entitled_leave_days(years, months, on_leave_suspend):
         return 3
     if total_months < 24:
         return 7
-    # 2年以上
+    # 2年以上，每年多1天，最高30天
     days = 10 + (years - 2)
     return min(days, 30)
+
+def entitled_sick_days(years, months):
+    """依勞基法，每年可用病假上限為30天"""
+    return 30
+
+def entitled_personal_days(years, months):
+    """依勞基法，每年可用事假上限為7天"""
+    return 7
+
+def entitled_marriage_days():
+    """依勞基法，婚假一次給8天"""
+    return 8
+
