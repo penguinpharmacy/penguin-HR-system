@@ -15,7 +15,7 @@
       </label>
     </div>
 
-    <!-- 到職與離職 -->
+    <!-- 到職／離職 -->
     <div>
       <label class="block">到職日：
         <input type="date" name="start_date" value="{{ emp[2] }}" required class="border px-2 py-1">
@@ -27,7 +27,7 @@
       </label>
     </div>
 
-    <!-- 部門與職等 -->
+    <!-- 部門／職等 -->
     <div>
       <label class="block">部門：
         <input type="text" name="department" value="{{ emp[4] }}" required class="border px-2 py-1 w-full">
@@ -69,7 +69,7 @@
       </label>
     </div>
 
-    <!-- 其他請假權益 -->
+    <!-- 病假 -->
     <div>
       <label class="block">可用病假（天）：
         <input type="number" name="entitled_sick" value="{{ emp[11] }}" min="0" class="border px-2 py-1 w-24">
@@ -80,6 +80,8 @@
         <input type="number" name="used_sick" value="{{ emp[12] }}" min="0" class="border px-2 py-1 w-24">
       </label>
     </div>
+
+    <!-- 事假 -->
     <div>
       <label class="block">可用事假（天）：
         <input type="number" name="entitled_personal" value="{{ emp[13] }}" min="0" class="border px-2 py-1 w-24">
@@ -90,6 +92,8 @@
         <input type="number" name="used_personal" value="{{ emp[14] }}" min="0" class="border px-2 py-1 w-24">
       </label>
     </div>
+
+    <!-- 婚假 -->
     <div>
       <label class="block">可用婚假（天）：
         <input type="number" name="entitled_marriage" value="{{ emp[15] }}" min="0" class="border px-2 py-1 w-24">
