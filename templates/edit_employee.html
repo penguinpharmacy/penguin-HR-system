@@ -8,11 +8,14 @@
 <body class="p-4">
   <h1 class="text-2xl mb-4">編輯員工</h1>
   <form action="/edit/{{ emp[0] }}" method="post" class="space-y-4">
+    <!-- 基本資料 -->
     <div>
       <label class="block">姓名：
         <input type="text" name="name" value="{{ emp[1] }}" required class="border px-2 py-1 w-full">
       </label>
     </div>
+
+    <!-- 到職與離職 -->
     <div>
       <label class="block">到職日：
         <input type="date" name="start_date" value="{{ emp[2] }}" required class="border px-2 py-1">
@@ -23,27 +26,82 @@
         <input type="date" name="end_date" value="{{ emp[3] }}" class="border px-2 py-1">
       </label>
     </div>
+
+    <!-- 部門與職等 -->
     <div>
       <label class="block">部門：
         <input type="text" name="department" value="{{ emp[4] }}" required class="border px-2 py-1 w-full">
       </label>
     </div>
     <div>
+      <label class="block">職等：
+        <input type="text" name="job_level" value="{{ emp[5] }}" class="border px-2 py-1 w-full">
+      </label>
+    </div>
+
+    <!-- 薪資資訊 -->
+    <div>
       <label class="block">薪資級距：
-        <input type="text" name="salary_grade" value="{{ emp[5] }}" required class="border px-2 py-1 w-full">
+        <input type="text" name="salary_grade" value="{{ emp[6] }}" required class="border px-2 py-1 w-full">
       </label>
     </div>
     <div>
+      <label class="block">底薪（NTD/月）：
+        <input type="number" name="base_salary" value="{{ emp[7] }}" min="0" class="border px-2 py-1 w-full">
+      </label>
+    </div>
+    <div>
+      <label class="block">職務津貼（NTD/月）：
+        <input type="number" name="position_allowance" value="{{ emp[8] }}" min="0" class="border px-2 py-1 w-full">
+      </label>
+    </div>
+
+    <!-- 留職停薪與特休 -->
+    <div>
       <label class="inline-flex items-center">
-        <input type="checkbox" name="suspend" {% if emp[6] %}checked{% endif %} class="mr-2">
+        <input type="checkbox" name="suspend" {% if emp[9] %}checked{% endif %} class="mr-2">
         留職停薪
       </label>
     </div>
     <div>
       <label class="block">已用特休天數：
-        <input type="number" name="used_leave" value="{{ emp[7] }}" min="0" class="border px-2 py-1 w-24">
+        <input type="number" name="used_leave" value="{{ emp[10] }}" min="0" class="border px-2 py-1 w-24">
       </label>
     </div>
+
+    <!-- 其他請假權益 -->
+    <div>
+      <label class="block">可用病假（天）：
+        <input type="number" name="entitled_sick" value="{{ emp[11] }}" min="0" class="border px-2 py-1 w-24">
+      </label>
+    </div>
+    <div>
+      <label class="block">已用病假（天）：
+        <input type="number" name="used_sick" value="{{ emp[12] }}" min="0" class="border px-2 py-1 w-24">
+      </label>
+    </div>
+    <div>
+      <label class="block">可用事假（天）：
+        <input type="number" name="entitled_personal" value="{{ emp[13] }}" min="0" class="border px-2 py-1 w-24">
+      </label>
+    </div>
+    <div>
+      <label class="block">已用事假（天）：
+        <input type="number" name="used_personal" value="{{ emp[14] }}" min="0" class="border px-2 py-1 w-24">
+      </label>
+    </div>
+    <div>
+      <label class="block">可用婚假（天）：
+        <input type="number" name="entitled_marriage" value="{{ emp[15] }}" min="0" class="border px-2 py-1 w-24">
+      </label>
+    </div>
+    <div>
+      <label class="block">已用婚假（天）：
+        <input type="number" name="used_marriage" value="{{ emp[16] }}" min="0" class="border px-2 py-1 w-24">
+      </label>
+    </div>
+
+    <!-- 操作按鈕 -->
     <div>
       <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded">儲存</button>
       <a href="/" class="ml-4 text-gray-600">取消</a>
@@ -51,3 +109,4 @@
   </form>
 </body>
 </html>
+
