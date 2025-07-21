@@ -226,9 +226,9 @@ def edit_employee(emp_id):
                   entitled_marriage=%s, used_marriage=%s
                 WHERE id=%s
             ''',
-            (name, start_date, end_date, dept, level, grade,
-             base, allowance, suspend, used,
-             sick_ent, sick_used, per_ent, per_used, mar_ent, mar_user, emp_id))
+             (name, start_date, end_date, dept, level, grade,
+              base, allowance, suspend, used,               
+              sick_ent, sick_used, per_ent, per_used, mar_ent, mar_used, emp_id))
             conn.commit()
         return redirect(url_for('index'))
     with get_conn() as conn, conn.cursor() as c:
