@@ -8,25 +8,24 @@ app = Flask(__name__)
 def get_conn():
     """連到 Supabase PostgreSQL"""
     return psycopg2.connect(os.environ['DATABASE_URL'])
-
-DB = 'database.db'
-
+    
 def init_db():
     """建立資料表（若不存在就建立）"""
-    with sqlite3.connect(DB) as conn:
-        c = conn.cursor()
+    with get_conn() as conn, conn.cursor() as c:
         c.execute('''
             CREATE TABLE IF NOT EXISTS employees (
-                id INTEGER PRIMARY KEY,
+                id SERIAL PRIMARY KEY,
                 name TEXT,
-                start_date TEXT,
-                end_date TEXT,
+                start_date DATE,
+                end_date DATE,
                 department TEXT,
                 salary_grade TEXT,
-                on_leave_suspend INTEGER,
+                on_leave_suspend BOOLEAN,
                 used_leave INTEGER
-            )
+            );
         ''')
+        conn.commit()
+
         # 新增：勞健保負擔明細
         c.execute('''
             CREATE TABLE IF NOT EXISTS insurances (
