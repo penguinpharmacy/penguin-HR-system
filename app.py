@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for
 from models import calculate_seniority, entitled_leave_days
 from datetime import datetime
 import os
-import psycopg2
+import psycopg
 
 app = Flask(__name__)
 def get_conn():
