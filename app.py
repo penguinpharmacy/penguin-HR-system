@@ -35,7 +35,6 @@ def get_conn():
     )
 
 def init_db():
-    """建立資料表（若不存在就建立）"""
     with get_conn() as conn, conn.cursor() as c:
         c.execute('''
             CREATE TABLE IF NOT EXISTS employees (
@@ -44,9 +43,18 @@ def init_db():
                 start_date DATE,
                 end_date DATE,
                 department TEXT,
+                job_level TEXT,
                 salary_grade TEXT,
+                base_salary INTEGER,
+                position_allowance INTEGER,
                 on_leave_suspend BOOLEAN,
-                used_leave INTEGER
+                used_leave INTEGER,
+                entitled_sick INTEGER,
+                used_sick INTEGER,
+                entitled_personal INTEGER,
+                used_personal INTEGER,
+                entitled_marriage INTEGER,
+                used_marriage INTEGER
             );
         ''')
         conn.commit()
@@ -72,10 +80,13 @@ def index():
     init_db()
     with get_conn() as conn, conn.cursor() as c:
         c.execute('''
-            SELECT id, name, start_date, end_date,
-                   department, salary_grade,
-                   on_leave_suspend, used_leave
-              FROM employees
+            SELECT id, name, start_date, end_date, department,
+                   job_level, salary_grade, base_salary, position_allowance,
+                   on_leave_suspend, used_leave,
+                   entitled_sick, used_sick,
+                   entitled_personal, used_personal,
+                   entitled_marriage, used_marriage
+              FROM employees;
         ''')
         rows = c.fetchall()
 
@@ -163,6 +174,8 @@ def edit_employee(emp_id):
         ''', (emp_id,))
         r = c.fetchone()
 
+    
+
     return render_template('edit_employee.html', emp=r)
 
 
@@ -182,7 +195,52 @@ def list_insurance():
         ''')
         rows = c.fetchall()
 
-    return render_template('insurance.html', items=rows)
+    employees = []
+    for (sid, name, sd, ed, dept,
+         level, grade, base, allowance,
+         suspend, used,
+         sick_ent, sick_used,
+         per_ent, per_used,
+         mar_ent, mar_used) in rows:
+        ref_date = ed or sd
+        if isinstance(ref_date, str):
+            ref_date = datetime.strptime(ref_date, '%Y-%m-%d').date()
+        years, months = calculate_seniority(ref_date)
+        entitled = entitled_leave_days(years, months, suspend)
+        employees.append({
+            'id': sid,
+            'name': name,
+            'start_date': sd,
+            'end_date': ed or '',
+            'department': dept,
+            'job_level': level,
+            'salary_grade': grade,
+            'base_salary': base,
+            'position_allowance': allowance,
+            'years': years,
+            'months': months,
+            'entitled': entitled,
+            'used': used,
+            'remaining': max(entitled - used, 0),
+            'suspend': suspend,
+            'entitled_sick': sick_ent,
+            'used_sick': sick_used,
+            'remaining_sick': max(sick_ent - sick_used, 0),
+            'entitled_personal': per_ent,
+            'used_personal': per_used,
+            'remaining_personal': max(per_ent - per_used, 0),
+            'entitled_marriage': mar_ent,
+            'used_marriage': mar_used,
+            'remaining_marriage': max(mar_ent - mar_used, 0)
+        })
+
+    return render_template('index.html', employees=employees)
+
+# 其餘 /add, /edit, /insurance 等路由同理要加對應欄位讀寫
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
 
 
 @app.route('/insurance/edit/<int:emp_id>', methods=['GET', 'POST'])
