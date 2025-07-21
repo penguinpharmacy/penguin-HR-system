@@ -3,20 +3,40 @@ from models import calculate_seniority, entitled_leave_days
 from datetime import datetime
 import os
 import psycopg
+import socket
+from urllib.parse import urlparse
 
 app = Flask(__name__)
 def get_conn():
     """
-    由環境變數 DATABASE_URL 建立 Postgres 連線，
-    並強制使用 SSL（sslmode=require），避免走 IPv6 失敗
+    解析 DATABASE_URL，強制走 IPv4，並加入 sslmode=require
     """
+    # 拿到原始 DSN
     dsn = os.environ['DATABASE_URL']
-    # 如果連線字串裡還沒帶 sslmode，就自動補上
+    # 補上 sslmode=require（若沒帶）
     if 'sslmode' not in dsn:
-        sep = '&' if '?' in dsn else '?'
-        dsn = dsn + sep + 'sslmode=require'
-    # 回傳連線
-    return psycopg.connect(dsn)
+        dsn += ('&' if '?' in dsn else '?') + 'sslmode=require'
+
+    # 解析 URL
+    result = urlparse(dsn)
+    host = result.hostname
+    port = result.port or 5432
+    user = result.username
+    password = result.password
+    dbname = result.path.lstrip('/')
+
+    # 只解析 IPv4
+    ipv4 = socket.getaddrinfo(host, port, socket.AF_INET)[0][4][0]
+
+    # 建立連線
+    return psycopg.connect(
+        host=ipv4,
+        port=port,
+        user=user,
+        password=password,
+        dbname=dbname,
+        sslmode='require'
+    )
     
 def init_db():
     """建立資料表（若不存在就建立）"""
