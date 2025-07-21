@@ -8,6 +8,7 @@
 <body class="p-4">
   <h1 class="text-2xl mb-4">新增員工</h1>
   <form action="/add" method="post" class="space-y-4">
+    <!-- 基本資料 -->
     <div>
       <label class="block">姓名：</label>
       <input type="text" name="name" required class="border px-2 py-1 w-full">
@@ -16,6 +17,22 @@
       <label class="block">部門：</label>
       <input type="text" name="department" class="border px-2 py-1 w-full">
     </div>
+
+    <!-- 職等與薪資 -->
+    <div>
+      <label class="block">職等：</label>
+      <input type="text" name="job_level" class="border px-2 py-1 w-full">
+    </div>
+    <div>
+      <label class="block">底薪（NTD/月）：</label>
+      <input type="number" name="base_salary" min="0" class="border px-2 py-1 w-full">
+    </div>
+    <div>
+      <label class="block">職務津貼（NTD/月）：</label>
+      <input type="number" name="position_allowance" min="0" class="border px-2 py-1 w-full">
+    </div>
+
+    <!-- 到職／離職 -->
     <div>
       <label class="block">到職日：</label>
       <input type="date" name="start_date" required class="border px-2 py-1">
@@ -24,10 +41,14 @@
       <label class="block">離職日（若無可留空）：</label>
       <input type="date" name="end_date" class="border px-2 py-1">
     </div>
+
+    <!-- 類別級距 -->
     <div>
       <label class="block">薪資級距：</label>
       <input type="text" name="salary_grade" required class="border px-2 py-1 w-full">
     </div>
+
+    <!-- 留職／特休 -->
     <div>
       <label class="inline-flex items-center">
         <input type="checkbox" name="suspend" class="mr-2">
@@ -35,9 +56,25 @@
       </label>
     </div>
     <div>
-      <label class="block">已用特休天數：</label>
+      <label class="block">已用特休（天）：</label>
       <input type="number" name="used_leave" value="0" min="0" class="border px-2 py-1 w-24">
     </div>
+
+    <!-- 其他假別 -->
+    <div>
+      <label class="block">年假外可用病假（天）：</label>
+      <input type="number" name="entitled_sick" value="0" min="0" class="border px-2 py-1 w-24">
+    </div>
+    <div>
+      <label class="block">事假（天）：</label>
+      <input type="number" name="entitled_personal" value="0" min="0" class="border px-2 py-1 w-24">
+    </div>
+    <div>
+      <label class="block">婚假（天）：</label>
+      <input type="number" name="entitled_marriage" value="0" min="0" class="border px-2 py-1 w-24">
+    </div>
+
+    <!-- 操作 -->
     <div>
       <button type="submit" class="px-4 py-2 bg-green-500 text-white rounded">送出</button>
       <a href="/" class="ml-4 text-gray-600">取消</a>
