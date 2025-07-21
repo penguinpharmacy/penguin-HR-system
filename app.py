@@ -7,16 +7,14 @@ import socket
 from urllib.parse import urlparse
 
 app = Flask(__name__)
+
 def get_conn():
     """
-    解析 DATABASE_URL，強制走 IPv4，並加入 sslmode=require
+    解析 DATABASE_URL（Transaction Pooler），強制走 IPv4，並加入 sslmode=require
     """
-    # 拿到原始 DSN
     dsn = os.environ['DATABASE_URL']
-    # 補上 sslmode=require（若沒帶）
     if 'sslmode' not in dsn:
         dsn += ('&' if '?' in dsn else '?') + 'sslmode=require'
-
     # 解析 URL
     result = urlparse(dsn)
     host = result.hostname
@@ -24,10 +22,8 @@ def get_conn():
     user = result.username
     password = result.password
     dbname = result.path.lstrip('/')
-
-    # 只解析 IPv4
+    # IPv4 解析
     ipv4 = socket.getaddrinfo(host, port, socket.AF_INET)[0][4][0]
-
     # 建立連線
     return psycopg.connect(
         host=ipv4,
@@ -37,7 +33,7 @@ def get_conn():
         dbname=dbname,
         sslmode='require'
     )
-    
+
 def init_db():
     """建立資料表（若不存在就建立）"""
     with get_conn() as conn, conn.cursor() as c:
@@ -54,12 +50,10 @@ def init_db():
             );
         ''')
         conn.commit()
-
-        # 新增：勞健保負擔明細
         c.execute('''
             CREATE TABLE IF NOT EXISTS insurances (
-                id INTEGER PRIMARY KEY,
-                employee_id INTEGER UNIQUE,
+                id SERIAL PRIMARY KEY,
+                employee_id INTEGER UNIQUE REFERENCES employees(id),
                 personal_labour INTEGER,
                 personal_health INTEGER,
                 company_labour INTEGER,
@@ -67,34 +61,32 @@ def init_db():
                 retirement6 INTEGER,
                 occupational_ins INTEGER,
                 total_company INTEGER,
-                note TEXT,
-                FOREIGN KEY(employee_id) REFERENCES employees(id)
-            )
+                note TEXT
+            );
         ''')
         conn.commit()
-
 
 @app.route('/')
 def index():
     """員工特休總覽，首頁進來先確保有 table"""
     init_db()
-
-    with sqlite3.connect(DB) as conn:
-        c = conn.cursor()
+    with get_conn() as conn, conn.cursor() as c:
         c.execute('''
             SELECT id, name, start_date, end_date,
                    department, salary_grade,
                    on_leave_suspend, used_leave
-            FROM employees
+              FROM employees
         ''')
         rows = c.fetchall()
 
     employees = []
     for sid, name, sd, ed, dept, grade, suspend, used in rows:
-        sd_date = datetime.strptime(sd, '%Y-%m-%d').date()
-        years, months = calculate_seniority(sd_date)
-        entitled = entitled_leave_days(years, months, bool(suspend))
-        remaining = max(entitled - used, 0)
+        # 計算年資：若有離職日，用離職日計算，否則用今天
+        ref_date = ed or sd
+        if isinstance(ref_date, str):
+            ref_date = datetime.strptime(ref_date, '%Y-%m-%d').date()
+        years, months = calculate_seniority(ref_date)
+        entitled = entitled_leave_days(years, months, suspend)
         employees.append({
             'id': sid,
             'name': name,
@@ -106,8 +98,8 @@ def index():
             'months': months,
             'entitled': entitled,
             'used': used,
-            'remaining': remaining,
-            'suspend': bool(suspend),
+            'remaining': max(entitled - used, 0),
+            'suspend': suspend
         })
 
     return render_template('index.html', employees=employees)
@@ -117,24 +109,21 @@ def index():
 def add_employee():
     """新增員工前也先確保有 table"""
     init_db()
-
     if request.method == 'POST':
         name       = request.form['name']
         start_date = request.form['start_date']
-        end_date   = request.form.get('end_date') or ''
+        end_date   = request.form.get('end_date') or None
         dept       = request.form['department']
         grade      = request.form['salary_grade']
-        suspend    = 1 if request.form.get('suspend') else 0
+        suspend    = bool(request.form.get('suspend'))
         used       = int(request.form.get('used_leave') or 0)
 
-        with sqlite3.connect(DB) as conn:
-            c = conn.cursor()
-            c.execute(
-                '''INSERT INTO employees
-                   (name, start_date, end_date, department, salary_grade, on_leave_suspend, used_leave)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)''',
-                (name, start_date, end_date, dept, grade, suspend, used)
-            )
+        with get_conn() as conn, conn.cursor() as c:
+            c.execute('''
+                INSERT INTO employees
+                  (name, start_date, end_date, department, salary_grade, on_leave_suspend, used_leave)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+            ''', (name, start_date, end_date, dept, grade, suspend, used))
             conn.commit()
         return redirect(url_for('index'))
 
@@ -145,58 +134,56 @@ def add_employee():
 def edit_employee(emp_id):
     """編輯員工：更新所有欄位"""
     init_db()
-
     if request.method == 'POST':
         name       = request.form['name']
         start_date = request.form['start_date']
-        end_date   = request.form.get('end_date') or ''
+        end_date   = request.form.get('end_date') or None
         dept       = request.form['department']
         grade      = request.form['salary_grade']
-        suspend    = 1 if request.form.get('suspend') else 0
+        suspend    = bool(request.form.get('suspend'))
         used       = int(request.form.get('used_leave') or 0)
 
-        with sqlite3.connect(DB) as conn:
-            c = conn.cursor()
-            c.execute(
-                '''UPDATE employees SET
-                     name=?, start_date=?, end_date=?, department=?, salary_grade=?,
-                     on_leave_suspend=?, used_leave=?
-                   WHERE id=?''',
-                (name, start_date, end_date, dept, grade, suspend, used, emp_id)
-            )
+        with get_conn() as conn, conn.cursor() as c:
+            c.execute('''
+                UPDATE employees SET
+                  name=%s, start_date=%s, end_date=%s,
+                  department=%s, salary_grade=%s,
+                  on_leave_suspend=%s, used_leave=%s
+                WHERE id=%s
+            ''', (name, start_date, end_date, dept, grade, suspend, used, emp_id))
             conn.commit()
         return redirect(url_for('index'))
 
-    with sqlite3.connect(DB) as conn:
-        c = conn.cursor()
-        c.execute(
-            '''SELECT id, name, start_date, end_date,
-                      department, salary_grade,
-                      on_leave_suspend, used_leave
-               FROM employees WHERE id=?''',
-            (emp_id,)
-        )
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute('''
+            SELECT id, name, start_date, end_date,
+                   department, salary_grade,
+                   on_leave_suspend, used_leave
+              FROM employees WHERE id=%s
+        ''', (emp_id,))
         r = c.fetchone()
 
     return render_template('edit_employee.html', emp=r)
+
 
 @app.route('/insurance')
 def list_insurance():
     """列出所有員工的保險負擔"""
     init_db()
-    with sqlite3.connect(DB) as conn:
-        c = conn.cursor()
+    with get_conn() as conn, conn.cursor() as c:
         c.execute('''
             SELECT e.id, e.name,
                    i.personal_labour, i.personal_health,
                    i.company_labour, i.company_health,
                    i.retirement6, i.occupational_ins,
                    i.total_company, i.note
-            FROM employees e
-            LEFT JOIN insurances i ON e.id = i.employee_id
+              FROM employees e
+              LEFT JOIN insurances i ON e.id = i.employee_id
         ''')
         rows = c.fetchall()
+
     return render_template('insurance.html', items=rows)
+
 
 @app.route('/insurance/edit/<int:emp_id>', methods=['GET', 'POST'])
 def edit_insurance(emp_id):
@@ -211,42 +198,38 @@ def edit_insurance(emp_id):
             int(request.form.get('retirement6') or 0),
             int(request.form.get('occupational_ins') or 0),
             int(request.form.get('total_company') or 0),
-            request.form.get('note',''),
+            request.form.get('note', ''),
             emp_id
         ]
-        with sqlite3.connect(DB) as conn:
-            c = conn.cursor()
-            # 如果已存在就更新，否則插入
-            c.execute('SELECT id FROM insurances WHERE employee_id=?', (emp_id,))
+        with get_conn() as conn, conn.cursor() as c:
+            c.execute('SELECT id FROM insurances WHERE employee_id=%s', (emp_id,))
             if c.fetchone():
                 c.execute('''
                     UPDATE insurances SET
-                      personal_labour=?, personal_health=?,
-                      company_labour=?, company_health=?,
-                      retirement6=?, occupational_ins=?,
-                      total_company=?, note=?
-                    WHERE employee_id=?
+                      personal_labour=%s, personal_health=%s,
+                      company_labour=%s, company_health=%s,
+                      retirement6=%s, occupational_ins=%s,
+                      total_company=%s, note=%s
+                    WHERE employee_id=%s
                 ''', vals)
             else:
                 c.execute('''
                     INSERT INTO insurances
-                    (personal_labour, personal_health,
-                     company_labour, company_health,
-                     retirement6, occupational_ins,
-                     total_company, note, employee_id)
-                    VALUES (?,?,?,?,?,?,?,?,?)
+                      (personal_labour, personal_health,
+                       company_labour, company_health,
+                       retirement6, occupational_ins,
+                       total_company, note, employee_id)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ''', vals)
             conn.commit()
         return redirect(url_for('list_insurance'))
-    # GET 讀出現有值（若無則全空）
-    with sqlite3.connect(DB) as conn:
-        c = conn.cursor()
-        c.execute('SELECT * FROM insurances WHERE employee_id=?', (emp_id,))
+
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute('SELECT * FROM insurances WHERE employee_id=%s', (emp_id,))
         r = c.fetchone() or [None, emp_id,0,0,0,0,0,0,0,'']
     return render_template('edit_insurance.html', emp_id=emp_id, ins=r)
 
 
 if __name__ == '__main__':
-    # 使用 Render 給的 PORT 啟動
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
