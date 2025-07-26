@@ -159,7 +159,7 @@ def index():
 
     return render_template('index.html', employees=employees)
 
- @app.route('/add', methods=['GET','POST'])
+@app.route('/add', methods=['GET','POST'])
 def add_employee():
     init_db()
     if request.method == 'POST':
