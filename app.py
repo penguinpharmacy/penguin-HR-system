@@ -390,6 +390,22 @@ def edit_insurance(emp_id):
         r = c.fetchone() or [None, emp_id,0,0,0,0,0,0,0,'']
     return render_template('edit_insurance.html', emp_id=emp_id, ins=r)
 
+@app.route('/delete/<int:emp_id>')
+def delete_employee(emp_id):
+    """軟刪除：把 is_active 設為 False, 並填離職日"""
+    init_db()
+    today = date.today()
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute('''
+            UPDATE employees
+               SET is_active = FALSE,
+                   end_date  = %s
+             WHERE id = %s
+        ''', (today, emp_id))
+        conn.commit()
+    return redirect(url_for('index'))
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
