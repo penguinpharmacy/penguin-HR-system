@@ -43,7 +43,12 @@
         <td>{{ e.department }}</td>
         <td>{{ e.start_date }}</td>
         <td>{{ e.end_date }}</td>
-        <td>{{ e.salary_grade }}</td>
+        <td>
+          <a href="{{ url_for('salary_detail', emp_id=e.id) }}"
+             class="text-blue-600">
+            {{ e.salary_grade }}
+          </a>
+        </td>
         <td>{{ e.job_level }}</td>
         <td>{{ e.base_salary }}</td>
         <td>{{ e.position_allowance }}</td>
