@@ -18,20 +18,25 @@ def get_conn():
     if 'sslmode' not in dsn:
         dsn += ('&' if '?' in dsn else '?') + 'sslmode=require'
     result = urlparse(dsn)
-    host, port = result.hostname, result.port or 5432
-    user, password = result.username, result.password
+    host = result.hostname
+    port = result.port or 5432
+    user = result.username
+    password = result.password
     dbname = result.path.lstrip('/')
     ipv4 = socket.getaddrinfo(host, port, socket.AF_INET)[0][4][0]
     return psycopg.connect(
-        host=ipv4, port=port,
-        user=user, password=password,
-        dbname=dbname, sslmode='require'
+        host=ipv4,
+        port=port,
+        user=user,
+        password=password,
+        dbname=dbname,
+        sslmode='require'
     )
 
 def init_db():
     """建立或升級 employees / insurances / leave_records 資料表"""
     with get_conn() as conn, conn.cursor() as c:
-        # employees 欄位檢查
+        # 確保 employees 欄位
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS job_level TEXT;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS base_salary INTEGER;")
@@ -43,7 +48,6 @@ def init_db():
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS used_personal INTEGER;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS entitled_marriage INTEGER;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS used_marriage INTEGER;")
-
         conn.commit()
 
         # 建立 employees 表（若不存在）
@@ -63,7 +67,7 @@ def init_db():
         ''')
         conn.commit()
 
-        # insurances 欄位檢查與建立
+        # insurances 部分（同原）
         c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS retirement6 INTEGER;")
         c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS occupational_ins INTEGER;")
         c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS total_company INTEGER;")
@@ -81,15 +85,7 @@ def init_db():
         ''')
         conn.commit()
 
-               # ※ 確保 insurances.id 欄位有 DEFAULT nextval(...) ※
-        c.execute("""
-            ALTER TABLE insurances
-            ALTER COLUMN id
-            SET DEFAULT nextval(pg_get_serial_sequence('insurances','id'));
-        """)
-        conn.commit()
-
-        # leave_records 建立（只需一次）
+        # —— 新增請假紀錄表 leave_records （只要宣告一次） —— 
         c.execute('''
             CREATE TABLE IF NOT EXISTS leave_records (
               id           SERIAL PRIMARY KEY,
@@ -107,32 +103,38 @@ def init_db():
 
 @app.route('/')
 def index():
-    """員工特休總覽：?all=1 顯示所有（含離職），預設只看在職"""
+    """員工特休總覽：預設只顯示在職，?all=1 則顯示所有（含離職）"""
     init_db()
+
+    # 讀 query string 決定要不要顯示所有員工
     show_all = (request.args.get('all') == '1')
+
     with get_conn() as conn, conn.cursor() as c:
         if show_all:
             c.execute('''
-                SELECT id, name, start_date, end_date,
-                       department, job_level,
-                       salary_grade, base_salary, position_allowance,
-                       on_leave_suspend, used_leave, entitled_leave,
-                       entitled_sick, used_sick,
-                       entitled_personal, used_personal,
-                       entitled_marriage, used_marriage,
-                       is_active
-                FROM employees ORDER BY id
+                SELECT
+                    id, name, start_date, end_date,
+                    department, job_level,
+                    salary_grade, base_salary, position_allowance,
+                    on_leave_suspend, used_leave, entitled_leave,
+                    entitled_sick, used_sick,
+                    entitled_personal, used_personal,
+                    entitled_marriage, used_marriage,
+                    is_active
+                FROM employees
+                ORDER BY id
             ''')
         else:
             c.execute('''
-                SELECT id, name, start_date, end_date,
-                       department, job_level,
-                       salary_grade, base_salary, position_allowance,
-                       on_leave_suspend, used_leave, entitled_leave,
-                       entitled_sick, used_sick,
-                       entitled_personal, used_personal,
-                       entitled_marriage, used_marriage,
-                       is_active
+                SELECT
+                    id, name, start_date, end_date,
+                    department, job_level,
+                    salary_grade, base_salary, position_allowance,
+                    on_leave_suspend, used_leave, entitled_leave,
+                    entitled_sick, used_sick,
+                    entitled_personal, used_personal,
+                    entitled_marriage, used_marriage,
+                    is_active
                 FROM employees
                 WHERE is_active = TRUE
                 ORDER BY id
@@ -148,7 +150,7 @@ def index():
          mar_ent, mar_used,
          is_active) in rows:
 
-        # None → 0
+        # 把 None 變 0
         sick_ent  = sick_ent  or 0
         sick_used = sick_used or 0
         per_ent   = per_ent   or 0
@@ -156,6 +158,7 @@ def index():
         mar_ent   = mar_ent   or 0
         mar_used  = mar_used  or 0
 
+        # 計算年資（如果要用離職日，ref_date 就是 ed；否則用 sd）
         ref_date = ed or sd
         if isinstance(ref_date, str):
             ref_date = datetime.strptime(ref_date, '%Y-%m-%d').date()
@@ -189,15 +192,17 @@ def index():
             'is_active': is_active,
         })
 
+    # 一併把 show_all 傳給模板，讓按鈕能切換
     return render_template('index.html',
                            employees=employees,
                            show_all=show_all)
+
 
 @app.route('/add', methods=['GET','POST'])
 def add_employee():
     init_db()
     if request.method == 'POST':
-        # 讀表單
+        # 1. 讀表單
         name       = request.form['name']
         start_date = request.form['start_date']
         end_date   = request.form.get('end_date') or None
@@ -209,14 +214,18 @@ def add_employee():
         suspend    = bool(request.form.get('suspend'))
         used       = int(request.form.get('used_leave') or 0)
 
-        # 自動算假
+        # 2. 自動計算各假別應有天數
         sd_date = datetime.strptime(start_date, '%Y-%m-%d').date()
         years, months = calculate_seniority(sd_date)
-        entitled = entitled_leave_days(years, months, suspend)
-        sick_ent = entitled_sick_days(years, months)
-        per_ent  = entitled_personal_days(years, months)
-        mar_ent  = entitled_marriage_days()
 
+        # 特休（留停歸零）
+        entitled = entitled_leave_days(years, months, suspend)
+        # 其餘假別（對照勞基法固定值）
+        sick_ent = entitled_sick_days(years, months)      # 病假 30
+        per_ent  = entitled_personal_days(years, months)  # 事假 14
+        mar_ent  = entitled_marriage_days()               # 婚假 8
+
+        # 3. 插入
         with get_conn() as conn, conn.cursor() as c:
             c.execute('''
                 INSERT INTO employees (
@@ -251,6 +260,92 @@ def add_employee():
             conn.commit()
         return redirect(url_for('index'))
     return render_template('add_employee.html')
+
+@app.route('/edit/<int:emp_id>', methods=['GET','POST'])
+def edit_employee(emp_id):
+    init_db()
+
+    if request.method == 'POST':
+        # 1. 讀取表單
+        name       = request.form['name']
+        start_date = request.form['start_date']
+        end_date   = request.form.get('end_date') or None
+        dept       = request.form['department']
+        level      = request.form.get('job_level') or ''
+        grade      = request.form['salary_grade']
+        base       = int(request.form.get('base_salary') or 0)
+        allowance  = int(request.form.get('position_allowance') or 0)
+        suspend    = bool(request.form.get('suspend'))
+        used       = int(request.form.get('used_leave') or 0)
+        sick_used  = int(request.form.get('used_sick') or 0)
+        per_used   = int(request.form.get('used_personal') or 0)
+        mar_used   = int(request.form.get('used_marriage') or 0)
+
+        # 2. 自動重新計算應有天數
+        sd_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+        years, months    = calculate_seniority(sd_date)
+        entitled         = entitled_leave_days(years, months, suspend)
+        sick_ent         = entitled_sick_days(years, months)
+        per_ent          = entitled_personal_days(years, months)
+        mar_ent          = entitled_marriage_days()
+
+        # 3. 根據 end_date 決定在職狀態
+        is_active = False if end_date else True
+
+        # 4. 更新所有欄位（含 is_active）
+        with get_conn() as conn, conn.cursor() as c:
+            c.execute('''
+                UPDATE employees SET
+                  name               = %s,
+                  start_date         = %s,
+                  end_date           = %s,
+                  department         = %s,
+                  job_level          = %s,
+                  salary_grade       = %s,
+                  base_salary        = %s,
+                  position_allowance = %s,
+                  on_leave_suspend   = %s,
+                  used_leave         = %s,
+                  entitled_leave     = %s,
+                  entitled_sick      = %s,  used_sick      = %s,
+                  entitled_personal  = %s,  used_personal  = %s,
+                  entitled_marriage  = %s,  used_marriage  = %s,
+                  is_active          = %s
+                WHERE id = %s
+            ''', (
+                name, start_date, end_date,
+                dept, level, grade,
+                base, allowance,
+                suspend, used,
+                entitled,
+                sick_ent, sick_used,
+                per_ent, per_used,
+                mar_ent, mar_used,
+                is_active,
+                emp_id
+            ))
+            conn.commit()
+
+        return redirect(url_for('index'))
+
+    # GET: 讀取原本資料填入表單
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute('''
+            SELECT
+              id, name, start_date, end_date,
+              department, job_level, salary_grade,
+              base_salary, position_allowance,
+              on_leave_suspend, used_leave,
+              entitled_leave,
+              entitled_sick, used_sick,
+              entitled_personal, used_personal,
+              entitled_marriage, used_marriage
+            FROM employees
+            WHERE id = %s
+        ''', (emp_id,))
+        r = c.fetchone()
+
+    return render_template('edit_employee.html', emp=r)
 
 @app.route('/insurance')
 def list_insurance():
@@ -334,31 +429,35 @@ def edit_insurance(emp_id):
                            ins=r)
 
 
+
 @app.route('/delete/<int:emp_id>')
 def delete_employee(emp_id):
+    """軟刪除：把 is_active 設為 False, 並填離職日"""
     init_db()
     today = date.today()
     with get_conn() as conn, conn.cursor() as c:
         c.execute('''
             UPDATE employees
-               SET is_active=FALSE, end_date=%s
-             WHERE id=%s
+               SET is_active = FALSE,
+                   end_date  = %s
+             WHERE id = %s
         ''', (today, emp_id))
         conn.commit()
     return redirect(url_for('index'))
 
 @app.route('/restore/<int:emp_id>')
 def restore_employee(emp_id):
+    """軟復原：把 is_active 設回 True，並清空離職日"""
     init_db()
     with get_conn() as conn, conn.cursor() as c:
         c.execute('''
             UPDATE employees
-               SET is_active=TRUE, end_date=NULL
-             WHERE id=%s
+               SET is_active = TRUE,
+                   end_date   = NULL
+             WHERE id = %s
         ''', (emp_id,))
         conn.commit()
     return redirect(url_for('index', all='1'))
-
 
 @app.route('/history/<int:emp_id>/<leave_type>')
 def leave_history(emp_id, leave_type):
@@ -498,4 +597,5 @@ def salary_detail(emp_id):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+
 
