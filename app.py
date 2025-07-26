@@ -67,31 +67,46 @@ def init_db():
         ''')
         conn.commit()
 
-        # insurances 部分（同原）
-        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS retirement6 INTEGER;")
-        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS occupational_ins INTEGER;")
-        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS total_company INTEGER;")
-        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS note TEXT;")
+      # 1) 先確保欄位都存在（ALTER TABLE IF NOT EXISTS）
+        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS personal_labour INTEGER DEFAULT 0;")
+        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS personal_health INTEGER DEFAULT 0;")
+        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS company_labour INTEGER DEFAULT 0;")
+        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS company_health INTEGER DEFAULT 0;")
+        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS retirement6 INTEGER DEFAULT 0;")
+        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS occupational_ins INTEGER DEFAULT 0;")
+        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS total_company INTEGER DEFAULT 0;")
+        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS note TEXT DEFAULT '';")
         conn.commit()
+
+        # 2) 建表（若不存在則建立，包括 SERIAL PRIMARY KEY）
         c.execute('''
             CREATE TABLE IF NOT EXISTS insurances (
               id SERIAL PRIMARY KEY,
               employee_id INTEGER UNIQUE REFERENCES employees(id),
-              personal_labour INTEGER, personal_health INTEGER,
-              company_labour INTEGER, company_health INTEGER,
-              retirement6 INTEGER, occupational_ins INTEGER,
-              total_company INTEGER, note TEXT
+              personal_labour INTEGER DEFAULT 0,
+              personal_health INTEGER DEFAULT 0,
+              company_labour INTEGER DEFAULT 0,
+              company_health INTEGER DEFAULT 0,
+              retirement6 INTEGER DEFAULT 0,
+              occupational_ins INTEGER DEFAULT 0,
+              total_company INTEGER DEFAULT 0,
+              note TEXT DEFAULT ''
             );
         ''')
         conn.commit()
-        # 確保 insurances.id 有 default 序列
+
+        # 3) 確保 id 欄位有正確的 DEFAULT 序列
         c.execute("""
-             ALTER TABLE insurances
-             ALTER COLUMN id
-             SET DEFAULT nextval(pg_get_serial_sequence('insurances','id'));
+          ALTER TABLE insurances
+            ALTER COLUMN id
+            SET DEFAULT nextval(pg_get_serial_sequence('insurances','id'));
+        """)
+        # （可選）設定 sequence 的 ownership
+        c.execute("""
+          ALTER SEQUENCE insurances_id_seq
+            OWNED BY insurances.id;
         """)
         conn.commit()
-
 
         
 
