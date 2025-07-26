@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, abort
 from models import calculate_seniority, entitled_leave_days, entitled_sick_days, entitled_personal_days, entitled_marriage_days
 from datetime import datetime, date
 import os
@@ -531,7 +531,42 @@ def edit_leave_record(emp_id, leave_type, record_id):
                            days=days,
                            note=note or '')
 
+@app.route('/salary/<int:emp_id>')
+def salary_detail(emp_id):
+    """顯示某員工的勞健保／職保負擔明細"""
+    init_db()
+    # 先查員工基本資料
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute('SELECT name, salary_grade FROM employees WHERE id=%s', (emp_id,))
+        row = c.fetchone()
+        if not row:
+            return abort(404)
+        name, grade = row
 
+    # 再查該員工的勞健保與職保負擔（insurances 表）
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute('''
+            SELECT personal_labour, personal_health,
+                   company_labour, company_health,
+                   retirement6, occupational_ins, total_company, note
+              FROM insurances
+             WHERE employee_id = %s
+        ''', (emp_id,))
+        ins = c.fetchone() or (0,0,0,0,0,0,0,'')  # 若無則用 0
+        (pl, ph, cl, ch, ret6, oi, total, note) = ins
+
+    return render_template('salary_detail.html',
+                           emp_id=emp_id,
+                           name=name,
+                           grade=grade,
+                           personal_labour=pl,
+                           personal_health=ph,
+                           company_labour=cl,
+                           company_health=ch,
+                           retirement6=ret6,
+                           occupational_ins=oi,
+                           total_company=total,
+                           note=note)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
