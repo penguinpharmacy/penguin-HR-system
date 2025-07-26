@@ -7,7 +7,8 @@
 </head>
 <body class="p-4">
   <h1 class="text-2xl mb-4">{{ name }} — {{ leave_type }} 紀錄</h1>
-  <a href="{{ url_for('leave_history', emp_id=emp_id, leave_type=leave_type) }}">← 返回列表</a>
+  <!-- 導回首頁，同時如果原本是在「顯示所有員工」狀態，就帶上 all=1 -->
+  <a href="{{ url_for('index', all=request.args.get('all', '0')) }}">← 返回列表</a>
 
   <form action="{{ url_for('add_leave_record', emp_id=emp_id, leave_type=leave_type) }}"
         method="post"
@@ -29,8 +30,8 @@
     <tbody>
       {% for r in records %}
       <tr class="border-t">
-        <td>{{ r.start_date }}</td>
-        <td>{{ r.end_date }}</td>
+        <td>{{ r.date_from }}</td>
+        <td>{{ r.date_to }}</td>
         <td>{{ r.days }}</td>
         <td>{{ r.note }}</td>
         <td>{{ r.created_at }}</td>
@@ -50,4 +51,5 @@
   </table>
 </body>
 </html>
+
 
