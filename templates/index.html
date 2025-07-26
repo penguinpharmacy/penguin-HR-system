@@ -50,27 +50,38 @@
         <td>{{ e.years }} 年 {{ e.months }} 月</td>
         <td>{{ e.entitled }}</td>
         <td>
-          <a href="{{ url_for('leave_history', 
-                               emp_id=e.id, 
-                               leave_type='特休') }}"
-             class="text-blue-600">
+          <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='特休') }}" class="text-blue-600">
             {{ e.used }}
           </a>
         </td>
-        <td>{{ e.remaining }}</td>
-        <td>{{ e.remaining_sick }}</td>
-        <td>{{ e.remaining_personal }}</td>
-        <td>{{ e.remaining_marriage }}</td>
+        <td>
+          <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='特休') }}" class="text-blue-600">
+            {{ e.remaining }}
+          </a>
+        </td>
+        <td>
+          <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='病假') }}" class="text-blue-600">
+            {{ e.remaining_sick }}
+          </a>
+        </td>
+        <td>
+          <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='事假') }}" class="text-blue-600">
+            {{ e.remaining_personal }}
+          </a>
+        </td>
+        <td>
+          <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='婚假') }}" class="text-blue-600">
+            {{ e.remaining_marriage }}
+          </a>
+        </td>
         <td>{{ '是' if e.suspend else '否' }}</td>
         <td>
           {% if e.is_active %}
           <a href="{{ url_for('edit_employee', emp_id=e.id) }}">編輯</a>
-          <a href="{{ url_for('delete_employee', emp_id=e.id) }}" class="ml-2 text-red-600"
-            onclick="return confirm('確定要封存此員工？');">刪除</a>
+          <a href="{{ url_for('delete_employee', emp_id=e.id) }}" class="ml-2 text-red-600" onclick="return confirm('確定要封存此員工？');">刪除</a>
           {% else %}
           <span class="text-gray-400">已離職</span>
-          <a href="{{ url_for('restore_employee', emp_id=e.id) }}" class="ml-2 text-green-600"
-            onclick="return confirm('確定要復職此員工？');">復職</a>
+          <a href="{{ url_for('restore_employee', emp_id=e.id) }}" class="ml-2 text-green-600" onclick="return confirm('確定要復職此員工？');">復職</a>
           {% endif %}
         </td>
       </tr>
@@ -79,3 +90,4 @@
   </table>
 </body>
 </html>
+
