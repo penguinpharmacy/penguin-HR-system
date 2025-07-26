@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for
 from models import calculate_seniority, entitled_leave_days, entitled_sick_days, entitled_personal_days, entitled_marriage_days
-from datetime import datetime
+from datetime import datetime, date
 import os
 import psycopg
 import socket
@@ -284,8 +284,9 @@ def add_employee():
 @app.route('/edit/<int:emp_id>', methods=['GET','POST'])
 def edit_employee(emp_id):
     init_db()
+
     if request.method == 'POST':
-        # 1. 讀表單
+        # 1. 讀取表單
         name       = request.form['name']
         start_date = request.form['start_date']
         end_date   = request.form.get('end_date') or None
@@ -296,53 +297,58 @@ def edit_employee(emp_id):
         allowance  = int(request.form.get('position_allowance') or 0)
         suspend    = bool(request.form.get('suspend'))
         used       = int(request.form.get('used_leave') or 0)
-        # 以下兩組先保留你從資料庫讀出的已用值
         sick_used  = int(request.form.get('used_sick') or 0)
         per_used   = int(request.form.get('used_personal') or 0)
         mar_used   = int(request.form.get('used_marriage') or 0)
 
-        # 2. 重新自動計算應有天數
+        # 2. 自動重新計算應有天數
         sd_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-        years, months = calculate_seniority(sd_date)
-        entitled     = entitled_leave_days(years, months, suspend)
-        sick_ent     = entitled_sick_days(years, months)
-        per_ent      = entitled_personal_days(years, months)
-        mar_ent      = entitled_marriage_days()
+        years, months    = calculate_seniority(sd_date)
+        entitled         = entitled_leave_days(years, months, suspend)
+        sick_ent         = entitled_sick_days(years, months)
+        per_ent          = entitled_personal_days(years, months)
+        mar_ent          = entitled_marriage_days()
 
-        # 3. 更新
+        # 3. 根據 end_date 決定在職狀態
+        is_active = False if end_date else True
+
+        # 4. 更新所有欄位（含 is_active）
         with get_conn() as conn, conn.cursor() as c:
             c.execute('''
                 UPDATE employees SET
-                  name=%s,
-                  start_date=%s,
-                  end_date=%s,
-                  department=%s,
-                  job_level=%s,
-                  salary_grade=%s,
-                  base_salary=%s,
-                  position_allowance=%s,
-                  on_leave_suspend=%s,
-                  used_leave=%s,
-                  entitled_leave=%s,
-                  entitled_sick=%s,  used_sick=%s,
-                  entitled_personal=%s, used_personal=%s,
-                  entitled_marriage=%s, used_marriage=%s
-                WHERE id=%s
+                  name               = %s,
+                  start_date         = %s,
+                  end_date           = %s,
+                  department         = %s,
+                  job_level          = %s,
+                  salary_grade       = %s,
+                  base_salary        = %s,
+                  position_allowance = %s,
+                  on_leave_suspend   = %s,
+                  used_leave         = %s,
+                  entitled_leave     = %s,
+                  entitled_sick      = %s,  used_sick      = %s,
+                  entitled_personal  = %s,  used_personal  = %s,
+                  entitled_marriage  = %s,  used_marriage  = %s,
+                  is_active          = %s
+                WHERE id = %s
             ''', (
                 name, start_date, end_date,
                 dept, level, grade,
                 base, allowance,
                 suspend, used,
                 entitled,
-                sick_ent,  sick_used,
-                per_ent,   per_used,
-                mar_ent,   mar_used,
+                sick_ent, sick_used,
+                per_ent, per_used,
+                mar_ent, mar_used,
+                is_active,
                 emp_id
             ))
             conn.commit()
+
         return redirect(url_for('index'))
 
-    # GET：載入現有資料到表單
+    # GET: 讀取原本資料填入表單
     with get_conn() as conn, conn.cursor() as c:
         c.execute('''
             SELECT
@@ -355,9 +361,10 @@ def edit_employee(emp_id):
               entitled_personal, used_personal,
               entitled_marriage, used_marriage
             FROM employees
-            WHERE id=%s
+            WHERE id = %s
         ''', (emp_id,))
         r = c.fetchone()
+
     return render_template('edit_employee.html', emp=r)
 
 @app.route('/insurance')
