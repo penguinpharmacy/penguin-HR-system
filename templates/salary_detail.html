@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{ name }} — 薪資級距 {{ grade }} 明細</title>
+  <link href="/static/style.css" rel="stylesheet">
+</head>
+<body class="p-4">
+  <h1 class="text-2xl mb-4">{{ name }} — 薪資級距 {{ grade }} 明細</h1>
+  <a href="{{ url_for('index') }}">← 回到總覽</a>
+
+  <table class="min-w-full border mt-6">
+    <thead>
+      <tr>
+        <th>個人負擔（勞保）</th>
+        <th>個人負擔（健保）</th>
+        <th>公司負擔（勞保）</th>
+        <th>公司負擔（健保）</th>
+        <th>公司負擔（6%提撥）</th>
+        <th>職業工會費</th>
+        <th>公司負擔總額</th>
+        <th>備註</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="border-t">
+        <td>{{ personal_labour }}</td>
+        <td>{{ personal_health }}</td>
+        <td>{{ company_labour }}</td>
+        <td>{{ company_health }}</td>
+        <td>{{ retirement6 }}</td>
+        <td>{{ occupational_ins }}</td>
+        <td>{{ total_company }}</td>
+        <td>{{ note }}</td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>
