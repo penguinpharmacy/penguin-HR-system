@@ -120,6 +120,22 @@ def init_db():
         ''')
         conn.commit()
 
+        
+        # —— 在這裡加上 leave_records —— 
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS leave_records (
+              id           SERIAL PRIMARY KEY,
+              employee_id  INTEGER REFERENCES employees(id),
+              leave_type   TEXT    NOT NULL,
+              date_from    DATE    NOT NULL,
+              date_to      DATE    NOT NULL,
+              days         INTEGER NOT NULL,
+              note         TEXT,
+              created_at   TIMESTAMP DEFAULT NOW()
+            );
+        ''')
+        conn.commit()
+
 
         # 新增請假紀錄表
         c.execute('''
