@@ -34,11 +34,13 @@ def get_conn():
 def init_db():
     """建立或升級 employees / insurances 資料表"""
     with get_conn() as conn, conn.cursor() as c:
-        # 確保欄位存在
+        # 確保新增 is_active 欄位（在職／封存）
+        c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;")
+        # 其他欄位檢查
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS job_level TEXT;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS base_salary INTEGER;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS position_allowance INTEGER;")
-        c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS entitled_leave INTEGER;")     # 新增這行
+        c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS entitled_leave INTEGER;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS entitled_sick INTEGER;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS used_sick INTEGER;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS entitled_personal INTEGER;")
@@ -47,7 +49,7 @@ def init_db():
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS used_marriage INTEGER;")
         conn.commit()
 
-        # 建立表格（若不存在則建立）
+        # 建立 employees 表格（若不存在）
         c.execute('''
             CREATE TABLE IF NOT EXISTS employees (
                 id SERIAL PRIMARY KEY,
@@ -67,10 +69,34 @@ def init_db():
                 entitled_personal INTEGER,
                 used_personal INTEGER,
                 entitled_marriage INTEGER,
-                used_marriage INTEGER
+                used_marriage INTEGER,
+                is_active BOOLEAN DEFAULT TRUE
             );
         ''')
         conn.commit()
+
+        # insurances 表欄位檢查與建立
+        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS retirement6 INTEGER;")
+        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS occupational_ins INTEGER;")
+        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS total_company INTEGER;")
+        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS note TEXT;")
+        conn.commit()
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS insurances (
+                id SERIAL PRIMARY KEY,
+                employee_id INTEGER UNIQUE REFERENCES employees(id),
+                personal_labour INTEGER,
+                personal_health INTEGER,
+                company_labour INTEGER,
+                company_health INTEGER,
+                retirement6 INTEGER,
+                occupational_ins INTEGER,
+                total_company INTEGER,
+                note TEXT
+            );
+        ''')
+        conn.commit()
+
 
         # insurances 表欄位檢查與建立
         c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS retirement6 INTEGER;")
