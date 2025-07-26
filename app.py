@@ -159,10 +159,11 @@ def index():
 
     return render_template('index.html', employees=employees)
 
-@app.route('/add', methods=['GET','POST'])
+ @app.route('/add', methods=['GET','POST'])
 def add_employee():
     init_db()
     if request.method == 'POST':
+        # 1. 讀表單
         name       = request.form['name']
         start_date = request.form['start_date']
         end_date   = request.form.get('end_date') or None
@@ -173,21 +174,19 @@ def add_employee():
         allowance  = int(request.form.get('position_allowance') or 0)
         suspend    = bool(request.form.get('suspend'))
         used       = int(request.form.get('used_leave') or 0)
-               # 重新依年資計算（忽略表單值）
-        sd_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d').date()
-        years, months = calculate_seniority(sd_date)
-        sick_ent = entitled_sick_days(years, months)
-        per_ent  = entitled_personal_days(years, months)
-        mar_ent  = entitled_marriage_days()
-         # ===== 自動計算各假別應有天數 =====
+
+        # 2. 自動計算各假別應有天數
         sd_date = datetime.strptime(start_date, '%Y-%m-%d').date()
         years, months = calculate_seniority(sd_date)
-        # 特休（留停才歸零）
+
+        # 特休（留停歸零）
         entitled = entitled_leave_days(years, months, suspend)
-        # 其餘假別全照勞基法
+        # 其餘假別（對照勞基法固定值）
         sick_ent = entitled_sick_days(years, months)      # 病假 30
         per_ent  = entitled_personal_days(years, months)  # 事假 7
         mar_ent  = entitled_marriage_days()               # 婚假 8
+
+        # 3. 插入
         with get_conn() as conn, conn.cursor() as c:
             c.execute('''
                 INSERT INTO employees (
@@ -195,7 +194,7 @@ def add_employee():
                   department, job_level, salary_grade,
                   base_salary, position_allowance,
                   on_leave_suspend, used_leave,
-                  entitled_leave,   -- 特休
+                  entitled_leave,
                   entitled_sick, used_sick,
                   entitled_personal, used_personal,
                   entitled_marriage, used_marriage
@@ -208,16 +207,16 @@ def add_employee():
                   %s,0,
                   %s,0,
                   %s,0
-                  )
+                )
             ''', (
                 name, start_date, end_date,
                 dept, level, grade,
                 base, allowance,
                 suspend, used,
                 entitled,
-                sick_ent,    # used_sick 預設 0
-                per_ent,     # used_personal 預設 0
-                mar_ent      # used_marriage 預設 0
+                sick_ent,
+                per_ent,
+                mar_ent
             ))
             conn.commit()
         return redirect(url_for('index'))
@@ -227,6 +226,7 @@ def add_employee():
 def edit_employee(emp_id):
     init_db()
     if request.method == 'POST':
+        # 1. 讀表單
         name       = request.form['name']
         start_date = request.form['start_date']
         end_date   = request.form.get('end_date') or None
@@ -237,31 +237,67 @@ def edit_employee(emp_id):
         allowance  = int(request.form.get('position_allowance') or 0)
         suspend    = bool(request.form.get('suspend'))
         used       = int(request.form.get('used_leave') or 0)
-        sick_ent   = int(request.form.get('entitled_sick') or 0)
+        # 以下兩組先保留你從資料庫讀出的已用值
         sick_used  = int(request.form.get('used_sick') or 0)
-        per_ent    = int(request.form.get('entitled_personal') or 0)
         per_used   = int(request.form.get('used_personal') or 0)
-        mar_ent    = int(request.form.get('entitled_marriage') or 0)
         mar_used   = int(request.form.get('used_marriage') or 0)
+
+        # 2. 重新自動計算應有天數
+        sd_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+        years, months = calculate_seniority(sd_date)
+        entitled     = entitled_leave_days(years, months, suspend)
+        sick_ent     = entitled_sick_days(years, months)
+        per_ent      = entitled_personal_days(years, months)
+        mar_ent      = entitled_marriage_days()
+
+        # 3. 更新
         with get_conn() as conn, conn.cursor() as c:
             c.execute('''
                 UPDATE employees SET
-                  name=%s, start_date=%s, end_date=%s,
-                  department=%s, job_level=%s, salary_grade=%s,
-                  base_salary=%s, position_allowance=%s,
-                  on_leave_suspend=%s, used_leave=%s,
-                  entitled_sick=%s, used_sick=%s,
+                  name=%s,
+                  start_date=%s,
+                  end_date=%s,
+                  department=%s,
+                  job_level=%s,
+                  salary_grade=%s,
+                  base_salary=%s,
+                  position_allowance=%s,
+                  on_leave_suspend=%s,
+                  used_leave=%s,
+                  entitled_leave=%s,
+                  entitled_sick=%s,  used_sick=%s,
                   entitled_personal=%s, used_personal=%s,
                   entitled_marriage=%s, used_marriage=%s
                 WHERE id=%s
-            ''',
-             (name, start_date, end_date, dept, level, grade,
-              base, allowance, suspend, used,               
-              sick_ent, sick_used, per_ent, per_used, mar_ent, mar_used, emp_id))
+            ''', (
+                name, start_date, end_date,
+                dept, level, grade,
+                base, allowance,
+                suspend, used,
+                entitled,
+                sick_ent,  sick_used,
+                per_ent,   per_used,
+                mar_ent,   mar_used,
+                emp_id
+            ))
             conn.commit()
         return redirect(url_for('index'))
+
+    # GET：載入現有資料到表單
     with get_conn() as conn, conn.cursor() as c:
-        c.execute('SELECT * FROM employees WHERE id=%s', (emp_id,))
+        c.execute('''
+            SELECT
+              id, name, start_date, end_date,
+              department, job_level, salary_grade,
+              base_salary, position_allowance,
+              on_leave_suspend, used_leave,
+              entitled_leave,
+              entitled_sick, used_sick,
+              entitled_personal, used_personal,
+              entitled_marriage, used_marriage
+            FROM employees
+            WHERE id=%s
+        ''', (emp_id,))
         r = c.fetchone()
     return render_template('edit_employee.html', emp=r)
 
