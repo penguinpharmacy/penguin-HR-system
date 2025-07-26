@@ -2,32 +2,38 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>{{ emp_name }} — {{ leave_type }} 編輯</title>
+  <title>{{ leave_type }} 紀錄編輯</title>
   <link href="/static/style.css" rel="stylesheet">
 </head>
 <body class="p-4">
-  <h1>{{ emp_name }} — {{ leave_type }} 編輯</h1>
-  <a href="{{ url_for('leave_history', emp_id=emp_id, leave_type=leave_type) }}">← 返回紀錄</a>
+  <h1 class="text-2xl mb-4">{{ leave_type }} 紀錄編輯</h1>
+  <a href="{{ url_for('leave_history', emp_id=emp_id, leave_type=leave_type) }}"
+     class="text-blue-600 mb-4 inline-block">← 返回紀錄</a>
 
-  <form action="" method="post" class="mt-4 space-y-4">
+  <form action="{{ url_for('edit_leave_record',
+                           emp_id=emp_id,
+                           leave_type=leave_type,
+                           record_id=record_id) }}"
+        method="post"
+        class="space-y-4">
     <div>
       <label>開始日期：
-        <input type="date" name="start_date" value="{{ r[1] }}" required>
+        <input type="date" name="start_date" value="{{ date_from }}" required class="border px-2 py-1">
       </label>
     </div>
     <div>
       <label>結束日期：
-        <input type="date" name="end_date" value="{{ r[2] }}" required>
+        <input type="date" name="end_date" value="{{ date_to }}" required class="border px-2 py-1">
       </label>
     </div>
     <div>
       <label>天數：
-        <input type="number" name="days" value="{{ r[3] }}" min="0" required>
+        <input type="number" name="days" value="{{ days }}" min="1" required class="border px-2 py-1 w-24">
       </label>
     </div>
     <div>
       <label>備註：
-        <input type="text" name="note" value="{{ r[4] }}">
+        <input type="text" name="note" value="{{ note }}" class="border px-2 py-1 w-full">
       </label>
     </div>
     <div>
@@ -37,3 +43,4 @@
   </form>
 </body>
 </html>
+
