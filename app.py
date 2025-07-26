@@ -38,6 +38,7 @@ def init_db():
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS job_level TEXT;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS base_salary INTEGER;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS position_allowance INTEGER;")
+        c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS entitled_leave INTEGER;")     # 新增這行
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS entitled_sick INTEGER;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS used_sick INTEGER;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS entitled_personal INTEGER;")
@@ -45,7 +46,8 @@ def init_db():
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS entitled_marriage INTEGER;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS used_marriage INTEGER;")
         conn.commit()
-        # 建立表格
+
+        # 建立表格（若不存在則建立）
         c.execute('''
             CREATE TABLE IF NOT EXISTS employees (
                 id SERIAL PRIMARY KEY,
@@ -59,6 +61,7 @@ def init_db():
                 position_allowance INTEGER,
                 on_leave_suspend BOOLEAN,
                 used_leave INTEGER,
+                entitled_leave INTEGER,
                 entitled_sick INTEGER,
                 used_sick INTEGER,
                 entitled_personal INTEGER,
@@ -68,7 +71,8 @@ def init_db():
             );
         ''')
         conn.commit()
-        # insurances表欄位檢查與建立
+
+        # insurances 表欄位檢查與建立
         c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS retirement6 INTEGER;")
         c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS occupational_ins INTEGER;")
         c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS total_company INTEGER;")
@@ -89,6 +93,7 @@ def init_db():
             );
         ''')
         conn.commit()
+
 
 @app.route('/')
 def index():
