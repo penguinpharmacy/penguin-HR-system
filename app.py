@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for
-from models import calculate_seniority, entitled_leave_days
+from models import calculate_seniority, entitled_leave_days, entitled_sick_days, entitled_personal_days, entitled_marriage_days
 from datetime import datetime
 import os
 import psycopg
@@ -173,9 +173,21 @@ def add_employee():
         allowance  = int(request.form.get('position_allowance') or 0)
         suspend    = bool(request.form.get('suspend'))
         used       = int(request.form.get('used_leave') or 0)
-        sick_ent   = int(request.form.get('entitled_sick') or 0)
-        per_ent    = int(request.form.get('entitled_personal') or 0)
-        mar_ent    = int(request.form.get('entitled_marriage') or 0)
+               # 重新依年資計算（忽略表單值）
+        sd_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d').date()
+        years, months = calculate_seniority(sd_date)
+        sick_ent = entitled_sick_days(years, months)
+        per_ent  = entitled_personal_days(years, months)
+        mar_ent  = entitled_marriage_days()
+         # ===== 自動計算各假別應有天數 =====
+        sd_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+        years, months = calculate_seniority(sd_date)
+        # 特休（留停才歸零）
+        entitled = entitled_leave_days(years, months, suspend)
+        # 其餘假別全照勞基法
+        sick_ent = entitled_sick_days(years, months)      # 病假 30
+        per_ent  = entitled_personal_days(years, months)  # 事假 7
+        mar_ent  = entitled_marriage_days()               # 婚假 8
         with get_conn() as conn, conn.cursor() as c:
             c.execute('''
                 INSERT INTO employees (
@@ -183,13 +195,30 @@ def add_employee():
                   department, job_level, salary_grade,
                   base_salary, position_allowance,
                   on_leave_suspend, used_leave,
-                  entitled_sick, entitled_personal,
-                  entitled_marriage
-                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            ''',
-            (name, start_date, end_date, dept, level, grade,
-             base, allowance, suspend, used,
-             sick_ent, per_ent, mar_ent))
+                  entitled_leave,   -- 特休
+                  entitled_sick, used_sick,
+                  entitled_personal, used_personal,
+                  entitled_marriage, used_marriage
+                ) VALUES (
+                  %s,%s,%s,
+                  %s,%s,%s,
+                  %s,%s,
+                  %s,%s,
+                  %s,
+                  %s,0,
+                  %s,0,
+                  %s,0
+                  )
+            ''', (
+                name, start_date, end_date,
+                dept, level, grade,
+                base, allowance,
+                suspend, used,
+                entitled,
+                sick_ent,    # used_sick 預設 0
+                per_ent,     # used_personal 預設 0
+                mar_ent      # used_marriage 預設 0
+            ))
             conn.commit()
         return redirect(url_for('index'))
     return render_template('add_employee.html')
