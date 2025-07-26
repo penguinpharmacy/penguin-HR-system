@@ -339,7 +339,7 @@ def list_insurance():
                    i.retirement6, i.occupational_ins,
                    i.total_company, i.note
               FROM employees e
-              LEFT JOIN insurances i ON e.id=i.employee_id
+              LEFT JOIN insurances i ON e.id = i.employee_id
         ''')
         rows = c.fetchall()
     return render_template('insurance.html', items=rows)
@@ -347,78 +347,56 @@ def list_insurance():
 @app.route('/insurance/edit/<int:emp_id>', methods=['GET','POST'])
 def edit_insurance(emp_id):
     init_db()
-    if request.method == 'POST':
+    if request.method=='POST':
         # 讀表單
-        personal_labour   = int(request.form.get('personal_labour') or 0)
-        personal_health   = int(request.form.get('personal_health') or 0)
-        company_labour    = int(request.form.get('company_labour') or 0)
-        company_health    = int(request.form.get('company_health') or 0)
-        retirement6       = int(request.form.get('retirement6') or 0)
-        occupational_ins  = int(request.form.get('occupational_ins') or 0)
-        total_company     = int(request.form.get('total_company') or 0)
-        note              = request.form.get('note','')
-
+        pl  = int(request.form.get('personal_labour') or 0)
+        ph  = int(request.form.get('personal_health') or 0)
+        cl  = int(request.form.get('company_labour') or 0)
+        ch  = int(request.form.get('company_health') or 0)
+        r6  = int(request.form.get('retirement6') or 0)
+        oi  = int(request.form.get('occupational_ins') or 0)
+        tot = int(request.form.get('total_company') or 0)
+        note= request.form.get('note','')
         with get_conn() as conn, conn.cursor() as c:
             c.execute('SELECT id FROM insurances WHERE employee_id=%s', (emp_id,))
             if c.fetchone():
                 c.execute('''
                     UPDATE insurances SET
-                      personal_labour   = %s,
-                      personal_health   = %s,
-                      company_labour    = %s,
-                      company_health    = %s,
-                      retirement6       = %s,
-                      occupational_ins  = %s,
-                      total_company     = %s,
-                      note              = %s
+                      personal_labour  = %s,
+                      personal_health  = %s,
+                      company_labour   = %s,
+                      company_health   = %s,
+                      retirement6      = %s,
+                      occupational_ins = %s,
+                      total_company    = %s,
+                      note             = %s
                     WHERE employee_id = %s
-                ''', (
-                    personal_labour,
-                    personal_health,
-                    company_labour,
-                    company_health,
-                    retirement6,
-                    occupational_ins,
-                    total_company,
-                    note,
-                    emp_id
-                ))
+                ''',(pl,ph,cl,ch,r6,oi,tot,note,emp_id))
             else:
                 c.execute('''
                     INSERT INTO insurances (
                       employee_id,
                       personal_labour, personal_health,
-                      company_labour, company_health,
-                      retirement6, occupational_ins,
-                      total_company, note
+                      company_labour,  company_health,
+                      retirement6,     occupational_ins,
+                      total_company,   note
                     ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                ''', (
-                    emp_id,
-                    personal_labour,
-                    personal_health,
-                    company_labour,
-                    company_health,
-                    retirement6,
-                    occupational_ins,
-                    total_company,
-                    note
-                ))
+                ''',(emp_id,pl,ph,cl,ch,r6,oi,tot,note))
             conn.commit()
         return redirect(url_for('list_insurance'))
 
-    # GET：載入現有保險負擔或預設
+    # GET：讀現有或預設
     with get_conn() as conn, conn.cursor() as c:
         c.execute('''
             SELECT id, employee_id,
                    personal_labour, personal_health,
-                   company_labour, company_health, 
+                   company_labour, company_health,
                    retirement6, occupational_ins,
                    total_company, note
               FROM insurances WHERE employee_id=%s
-        ''', (emp_id,))
-        r = c.fetchone() or [None, emp_id,0,0,0,0,0,0,0,'']
+        ''',(emp_id,))
+        r = c.fetchone() or [None,emp_id,0,0,0,0,0,0,0,'']
     return render_template('edit_insurance.html', emp_id=emp_id, ins=r)
-
 
 @app.route('/delete/<int:emp_id>')
 def delete_employee(emp_id):
