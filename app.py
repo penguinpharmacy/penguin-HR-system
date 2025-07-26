@@ -242,7 +242,7 @@ def add_employee():
         entitled = entitled_leave_days(years, months, suspend)
         # 其餘假別（對照勞基法固定值）
         sick_ent = entitled_sick_days(years, months)      # 病假 30
-        per_ent  = entitled_personal_days(years, months)  # 事假 7
+        per_ent  = entitled_personal_days(years, months)  # 事假 14
         mar_ent  = entitled_marriage_days()               # 婚假 8
 
         # 3. 插入
