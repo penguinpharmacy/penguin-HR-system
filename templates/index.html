@@ -11,6 +11,9 @@
     <a href="/?all={{ '0' if show_all else '1' }}" class="text-blue-600">
       {{ '顯示在職員工' if show_all else '顯示所有員工（含離職）' }}
     </a>
+    <a href="{{ url_for('list_insurance') }}" class="ml-4 text-green-600">
+       保險負擔
+    </a>
     <a href="/add" class="ml-4 text-purple-600">新增員工</a>
   </div>
 
