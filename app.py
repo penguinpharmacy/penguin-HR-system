@@ -252,85 +252,70 @@ def add_employee():
         return redirect(url_for('index'))
     return render_template('add_employee.html')
 
-@app.route('/edit/<int:emp_id>', methods=['GET','POST'])
-def edit_employee(emp_id):
+@app.route('/insurance/edit/<int:emp_id>', methods=['GET','POST'])
+def edit_insurance(emp_id):
     init_db()
     if request.method == 'POST':
-        # 讀表單
-        name       = request.form['name']
-        start_date = request.form['start_date']
-        end_date   = request.form.get('end_date') or None
-        dept       = request.form['department']
-        level      = request.form.get('job_level') or ''
-        grade      = request.form['salary_grade']
-        base       = int(request.form.get('base_salary') or 0)
-        allowance  = int(request.form.get('position_allowance') or 0)
-        suspend    = bool(request.form.get('suspend'))
-        used       = int(request.form.get('used_leave') or 0)
-        sick_used  = int(request.form.get('used_sick') or 0)
-        per_used   = int(request.form.get('used_personal') or 0)
-        mar_used   = int(request.form.get('used_marriage') or 0)
-
-        # 自動算假
-        sd_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-        years, months = calculate_seniority(sd_date)
-        entitled = entitled_leave_days(years, months, suspend)
-        sick_ent = entitled_sick_days(years, months)
-        per_ent  = entitled_personal_days(years, months)
-        mar_ent  = entitled_marriage_days()
-
-        is_active = False if end_date else True
+        # 1. 讀表單
+        pl  = int(request.form.get('personal_labour')   or 0)
+        ph  = int(request.form.get('personal_health')   or 0)
+        cl  = int(request.form.get('company_labour')    or 0)
+        ch  = int(request.form.get('company_health')    or 0)
+        r6  = int(request.form.get('retirement6')       or 0)
+        oi  = int(request.form.get('occupational_ins')  or 0)
+        tot = int(request.form.get('total_company')     or 0)
+        note= request.form.get('note','')
 
         with get_conn() as conn, conn.cursor() as c:
-            c.execute('''
-                UPDATE employees SET
-                  name               = %s,
-                  start_date         = %s,
-                  end_date           = %s,
-                  department         = %s,
-                  job_level          = %s,
-                  salary_grade       = %s,
-                  base_salary        = %s,
-                  position_allowance = %s,
-                  on_leave_suspend   = %s,
-                  used_leave         = %s,
-                  entitled_leave     = %s,
-                  entitled_sick      = %s,  used_sick      = %s,
-                  entitled_personal  = %s,  used_personal  = %s,
-                  entitled_marriage  = %s,  used_marriage  = %s,
-                  is_active          = %s
-                WHERE id = %s
-            ''', (
-                name, start_date, end_date,
-                dept, level, grade,
-                base, allowance,
-                suspend, used,
-                entitled,
-                sick_ent, sick_used,
-                per_ent, per_used,
-                mar_ent, mar_used,
-                is_active,
-                emp_id
-            ))
+            # 檢查是否已有這位員工的保險記錄
+            c.execute('SELECT id FROM insurances WHERE employee_id=%s', (emp_id,))
+            if c.fetchone():
+                # 已存在則 UPDATE
+                c.execute('''
+                    UPDATE insurances SET
+                      personal_labour  = %s,
+                      personal_health  = %s,
+                      company_labour   = %s,
+                      company_health   = %s,
+                      retirement6      = %s,
+                      occupational_ins = %s,
+                      total_company    = %s,
+                      note             = %s
+                    WHERE employee_id = %s
+                ''', (pl, ph, cl, ch, r6, oi, tot, note, emp_id))
+            else:
+                # 不存在則 INSERT，不帶 id，由 PostgreSQL 自動帶 DEFAULT nextval(...)
+                c.execute('''
+                    INSERT INTO insurances (
+                      employee_id,
+                      personal_labour, personal_health,
+                      company_labour,  company_health,
+                      retirement6,     occupational_ins,
+                      total_company,   note
+                    ) VALUES (
+                      %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                ''', (emp_id, pl, ph, cl, ch, r6, oi, tot, note))
             conn.commit()
-        return redirect(url_for('index'))
 
-    # GET：載入員工資料
+        return redirect(url_for('list_insurance'))
+
+    # GET：載入既有資料或給預設值
     with get_conn() as conn, conn.cursor() as c:
         c.execute('''
-            SELECT
-              id, name, start_date, end_date,
-              department, job_level, salary_grade,
-              base_salary, position_allowance,
-              on_leave_suspend, used_leave,
-              entitled_leave,
-              entitled_sick, used_sick,
-              entitled_personal, used_personal,
-              entitled_marriage, used_marriage
-            FROM employees WHERE id=%s
+            SELECT id, employee_id,
+                   personal_labour, personal_health,
+                   company_labour, company_health,
+                   retirement6, occupational_ins,
+                   total_company, note
+              FROM insurances
+             WHERE employee_id=%s
         ''', (emp_id,))
-        r = c.fetchone()
-    return render_template('edit_employee.html', emp=r)
+        r = c.fetchone() or [None, emp_id, 0, 0, 0, 0, 0, 0, 0, '']
+
+    return render_template('edit_insurance.html',
+                           emp_id=emp_id,
+                           ins=r)
 
 @app.route('/insurance')
 def list_insurance():
