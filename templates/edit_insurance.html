@@ -7,54 +7,66 @@
 </head>
 <body class="p-4">
   <h1 class="text-2xl mb-4">編輯保險負擔 — 員工 {{ emp_id }}</h1>
-  <a href="{{ url_for('list_insurance') }}">← 返回保險負擔總覽</a>
+  <a href="{{ url_for('list_insurance') }}" class="text-blue-600">← 返回保險負擔總覽</a>
 
   <form action="{{ url_for('edit_insurance', emp_id=emp_id) }}"
-        method="post" class="mt-4 space-y-4">
+        method="post"
+        class="mt-4 space-y-4 max-w-md">
     <div>
       <label class="block">個人勞保：
-        <input type="number" name="personal_labour" value="{{ ins[2] }}" min="0" class="border px-2 py-1 w-32">
+        <input type="number" name="personal_labour" value="{{ ins[2] }}"
+               min="0" class="border px-2 py-1 w-full">
       </label>
     </div>
     <div>
       <label class="block">個人健保：
-        <input type="number" name="personal_health" value="{{ ins[3] }}" min="0" class="border px-2 py-1 w-32">
+        <input type="number" name="personal_health" value="{{ ins[3] }}"
+               min="0" class="border px-2 py-1 w-full">
       </label>
     </div>
     <div>
       <label class="block">公司勞保：
-        <input type="number" name="company_labour" value="{{ ins[4] }}" min="0" class="border px-2 py-1 w-32">
+        <input type="number" name="company_labour" value="{{ ins[4] }}"
+               min="0" class="border px-2 py-1 w-full">
       </label>
     </div>
     <div>
       <label class="block">公司健保：
-        <input type="number" name="company_health" value="{{ ins[5] }}" min="0" class="border px-2 py-1 w-32">
+        <input type="number" name="company_health" value="{{ ins[5] }}"
+               min="0" class="border px-2 py-1 w-full">
       </label>
     </div>
     <div>
       <label class="block">退休金（6%提撥）：
-        <input type="number" name="retirement6" value="{{ ins[6] }}" min="0" class="border px-2 py-1 w-32">
+        <input type="number" name="retirement6" value="{{ ins[6] }}"
+               min="0" class="border px-2 py-1 w-full">
       </label>
     </div>
     <div>
       <label class="block">職業工會費：
-        <input type="number" name="occupational_ins" value="{{ ins[7] }}" min="0" class="border px-2 py-1 w-32">
+        <input type="number" name="occupational_ins" value="{{ ins[7] }}"
+               min="0" class="border px-2 py-1 w-full">
       </label>
     </div>
     <div>
       <label class="block">公司負擔總額：
-        <input type="number" name="total_company" value="{{ ins[8] }}" min="0" class="border px-2 py-1 w-32">
+        <input type="number" name="total_company" value="{{ ins[8] }}"
+               min="0" class="border px-2 py-1 w-full">
       </label>
     </div>
     <div>
       <label class="block">備註：
-        <input type="text" name="note" value="{{ ins[9] }}" class="border px-2 py-1 w-full">
+        <input type="text" name="note" value="{{ ins[9] or '' }}"
+               class="border px-2 py-1 w-full">
       </label>
     </div>
     <div>
-      <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded">儲存</button>
-      <a href="{{ url_for('list_insurance') }}" class="ml-4 text-gray-600">取消</a>
+      <button type="submit"
+              class="px-4 py-2 bg-green-500 text-white rounded">儲存</button>
+      <a href="{{ url_for('list_insurance') }}"
+         class="ml-4 text-gray-600">取消</a>
     </div>
   </form>
 </body>
 </html>
+
