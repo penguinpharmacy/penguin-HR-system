@@ -546,10 +546,10 @@ def edit_leave_record(emp_id, leave_type, record_id):
         with get_conn() as conn, conn.cursor() as c:
             c.execute('''
                 UPDATE leave_records
-                   SET start_date = %s,
-                       end_date   = %s,
-                       days       = %s,
-                       note       = %s
+                   SET date_from = %s,
+                       date_to   = %s,
+                       days      = %s,
+                       note      = %s
                  WHERE id = %s
             ''', (start_date, end_date, days, note, record_id))
             conn.commit()
@@ -557,13 +557,23 @@ def edit_leave_record(emp_id, leave_type, record_id):
 
     # GET：讀出現有紀錄，填入表單
     with get_conn() as conn, conn.cursor() as c:
-        c.execute('SELECT id, start_date, end_date, days, note FROM leave_records WHERE id=%s',
-                  (record_id,))
-        record = c.fetchone()
+        c.execute('''
+            SELECT date_from, date_to, days, note
+              FROM leave_records
+             WHERE id = %s
+        ''', (record_id,))
+        rec = c.fetchone()
+
+    # 渲染編輯表單
     return render_template('edit_leave.html',
                            emp_id=emp_id,
                            leave_type=leave_type,
-                           r=record)
+                           record_id=record_id,
+                           date_from=rec[0].strftime('%Y-%m-%d'),
+                           date_to  =rec[1].strftime('%Y-%m-%d'),
+                           days     =rec[2],
+                           note     =rec[3] or '')
+
 
 
 if __name__ == '__main__':
