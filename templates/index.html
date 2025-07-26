@@ -49,7 +49,14 @@
         <td>{{ e.position_allowance }}</td>
         <td>{{ e.years }} 年 {{ e.months }} 月</td>
         <td>{{ e.entitled }}</td>
-        <td>{{ e.used }}</td>
+        <td>
+          <a href="{{ url_for('leave_history', 
+                               emp_id=e.id, 
+                               leave_type='特休') }}"
+             class="text-blue-600">
+            {{ e.used }}
+          </a>
+        </td>
         <td>{{ e.remaining }}</td>
         <td>{{ e.remaining_sick }}</td>
         <td>{{ e.remaining_personal }}</td>
