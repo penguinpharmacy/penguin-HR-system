@@ -574,6 +574,30 @@ def edit_leave_record(emp_id, leave_type, record_id):
                            days     =rec[2],
                            note     =rec[3] or '')
 
+@app.route('/history/<int:emp_id>/<leave_type>/add', methods=['GET', 'POST'])
+def add_leave_record(emp_id, leave_type):
+    init_db()
+    if request.method == 'POST':
+        date_from = request.form['start_date']
+        date_to   = request.form['end_date']
+        days      = int(request.form['days'])
+        note      = request.form.get('note', '')
+        with get_conn() as conn, conn.cursor() as c:
+            c.execute('''
+                INSERT INTO leave_records
+                  (employee_id, leave_type, date_from, date_to, days, note)
+                VALUES (%s,         %s,         %s,        %s,      %s,   %s)
+            ''', (emp_id, leave_type, date_from, date_to, days, note))
+            conn.commit()
+        return redirect(url_for('leave_history', emp_id=emp_id, leave_type=leave_type))
+
+    # GET：直接渲染新增表单
+    return render_template(
+        'add_leave.html',
+        emp_id=emp_id,
+        leave_type=leave_type
+    )
+
 
 
 if __name__ == '__main__':
