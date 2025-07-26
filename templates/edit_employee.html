@@ -68,40 +68,45 @@
         <input type="number" name="used_leave" value="{{ emp[10] }}" min="0" class="border px-2 py-1 w-24">
       </label>
     </div>
+    <div>
+      <label class="block">應有特休天數：
+        <input type="number" name="entitled_leave" value="{{ emp[11] }}" readonly class="border px-2 py-1 w-24 bg-gray-100">
+      </label>
+    </div>
 
     <!-- 病假 -->
     <div>
       <label class="block">可用病假（天）：
-        <input type="number" name="entitled_sick" value="{{ emp[11] }}" min="0" class="border px-2 py-1 w-24">
+        <input type="number" name="entitled_sick" value="{{ emp[12] }}" readonly class="border px-2 py-1 w-24 bg-gray-100">
       </label>
     </div>
     <div>
       <label class="block">已用病假（天）：
-        <input type="number" name="used_sick" value="{{ emp[12] }}" min="0" class="border px-2 py-1 w-24">
+        <input type="number" name="used_sick" value="{{ emp[13] }}" min="0" class="border px-2 py-1 w-24">
       </label>
     </div>
 
     <!-- 事假 -->
     <div>
       <label class="block">可用事假（天）：
-        <input type="number" name="entitled_personal" value="{{ emp[13] }}" min="0" class="border px-2 py-1 w-24">
+        <input type="number" name="entitled_personal" value="{{ emp[14] }}" readonly class="border px-2 py-1 w-24 bg-gray-100">
       </label>
     </div>
     <div>
       <label class="block">已用事假（天）：
-        <input type="number" name="used_personal" value="{{ emp[14] }}" min="0" class="border px-2 py-1 w-24">
+        <input type="number" name="used_personal" value="{{ emp[15] }}" min="0" class="border px-2 py-1 w-24">
       </label>
     </div>
 
     <!-- 婚假 -->
     <div>
       <label class="block">可用婚假（天）：
-        <input type="number" name="entitled_marriage" value="{{ emp[15] }}" min="0" class="border px-2 py-1 w-24">
+        <input type="number" name="entitled_marriage" value="{{ emp[16] }}" readonly class="border px-2 py-1 w-24 bg-gray-100">
       </label>
     </div>
     <div>
       <label class="block">已用婚假（天）：
-        <input type="number" name="used_marriage" value="{{ emp[16] }}" min="0" class="border px-2 py-1 w-24">
+        <input type="number" name="used_marriage" value="{{ emp[17] }}" min="0" class="border px-2 py-1 w-24">
       </label>
     </div>
 
@@ -113,4 +118,3 @@
   </form>
 </body>
 </html>
-
