@@ -440,6 +440,20 @@ def delete_employee(emp_id):
         conn.commit()
     return redirect(url_for('index'))
 
+@app.route('/restore/<int:emp_id>')
+def restore_employee(emp_id):
+    """軟復原：把 is_active 設回 True，並清空離職日"""
+    init_db()
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute('''
+            UPDATE employees
+               SET is_active = TRUE,
+                   end_date   = NULL
+             WHERE id = %s
+        ''', (emp_id,))
+        conn.commit()
+    return redirect(url_for('index', all='1'))
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
