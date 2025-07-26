@@ -32,11 +32,10 @@ def get_conn():
     )
 
 def init_db():
-    """建立或升級 employees / insurances 資料表"""
+    """建立或升級 employees / insurances / leave_records 資料表"""
     with get_conn() as conn, conn.cursor() as c:
-        # 確保新增 is_active 欄位（在職／封存）
+        # 確保 employees 欄位
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;")
-        # 其他欄位檢查
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS job_level TEXT;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS base_salary INTEGER;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS position_allowance INTEGER;")
@@ -49,33 +48,24 @@ def init_db():
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS used_marriage INTEGER;")
         conn.commit()
 
-        # 建立 employees 表格（若不存在）
+        # 建立 employees 表（若不存在）
         c.execute('''
             CREATE TABLE IF NOT EXISTS employees (
-                id SERIAL PRIMARY KEY,
-                name TEXT,
-                start_date DATE,
-                end_date DATE,
-                department TEXT,
-                job_level TEXT,
-                salary_grade TEXT,
-                base_salary INTEGER,
-                position_allowance INTEGER,
-                on_leave_suspend BOOLEAN,
-                used_leave INTEGER,
-                entitled_leave INTEGER,
-                entitled_sick INTEGER,
-                used_sick INTEGER,
-                entitled_personal INTEGER,
-                used_personal INTEGER,
-                entitled_marriage INTEGER,
-                used_marriage INTEGER,
-                is_active BOOLEAN DEFAULT TRUE
+              id SERIAL PRIMARY KEY,
+              name TEXT, start_date DATE, end_date DATE,
+              department TEXT, job_level TEXT, salary_grade TEXT,
+              base_salary INTEGER, position_allowance INTEGER,
+              on_leave_suspend BOOLEAN, used_leave INTEGER,
+              entitled_leave INTEGER,
+              entitled_sick INTEGER, used_sick INTEGER,
+              entitled_personal INTEGER, used_personal INTEGER,
+              entitled_marriage INTEGER, used_marriage INTEGER,
+              is_active BOOLEAN DEFAULT TRUE
             );
         ''')
         conn.commit()
 
-        # insurances 表欄位檢查與建立
+        # insurances 部分（同原）
         c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS retirement6 INTEGER;")
         c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS occupational_ins INTEGER;")
         c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS total_company INTEGER;")
@@ -83,45 +73,17 @@ def init_db():
         conn.commit()
         c.execute('''
             CREATE TABLE IF NOT EXISTS insurances (
-                id SERIAL PRIMARY KEY,
-                employee_id INTEGER UNIQUE REFERENCES employees(id),
-                personal_labour INTEGER,
-                personal_health INTEGER,
-                company_labour INTEGER,
-                company_health INTEGER,
-                retirement6 INTEGER,
-                occupational_ins INTEGER,
-                total_company INTEGER,
-                note TEXT
+              id SERIAL PRIMARY KEY,
+              employee_id INTEGER UNIQUE REFERENCES employees(id),
+              personal_labour INTEGER, personal_health INTEGER,
+              company_labour INTEGER, company_health INTEGER,
+              retirement6 INTEGER, occupational_ins INTEGER,
+              total_company INTEGER, note TEXT
             );
         ''')
         conn.commit()
 
-
-        # insurances 表欄位檢查與建立
-        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS retirement6 INTEGER;")
-        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS occupational_ins INTEGER;")
-        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS total_company INTEGER;")
-        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS note TEXT;")
-        conn.commit()
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS insurances (
-                id SERIAL PRIMARY KEY,
-                employee_id INTEGER UNIQUE REFERENCES employees(id),
-                personal_labour INTEGER,
-                personal_health INTEGER,
-                company_labour INTEGER,
-                company_health INTEGER,
-                retirement6 INTEGER,
-                occupational_ins INTEGER,
-                total_company INTEGER,
-                note TEXT
-            );
-        ''')
-        conn.commit()
-
-        
-        # —— 在這裡加上 leave_records —— 
+        # —— 新增請假紀錄表 leave_records （只要宣告一次） —— 
         c.execute('''
             CREATE TABLE IF NOT EXISTS leave_records (
               id           SERIAL PRIMARY KEY,
@@ -135,23 +97,6 @@ def init_db():
             );
         ''')
         conn.commit()
-
-
-        # 新增請假紀錄表
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS leave_records (
-              id           SERIAL PRIMARY KEY,
-              employee_id  INTEGER REFERENCES employees(id),
-              leave_type   TEXT    NOT NULL,     -- "特休"/"病假"/"事假"/"婚假"
-              date_from    DATE    NOT NULL,
-              date_to      DATE    NOT NULL,
-              days         INTEGER NOT NULL,
-              note         TEXT,
-              created_at   TIMESTAMP DEFAULT NOW()
-            );
-        ''')
-        conn.commit()
-
 
 
 @app.route('/')
@@ -489,23 +434,32 @@ def restore_employee(emp_id):
 
 @app.route('/history/<int:emp_id>/<leave_type>')
 def leave_history(emp_id, leave_type):
-    """顯示某員工某假別的歷史紀錄，並提供新增紀錄表單（內部使用）"""
     init_db()
-    # 抓員工姓名
+    # 1. 拿姓名
     with get_conn() as conn, conn.cursor() as c:
         c.execute('SELECT name FROM employees WHERE id=%s', (emp_id,))
         name = c.fetchone()[0]
-
-    # 抓請假紀錄
-    with get_conn() as conn, conn.cursor() as c:
+        # 2. 拿請假紀錄
         c.execute('''
-            SELECT date_from, date_to, days, note, created_at
+            SELECT id, date_from, date_to, days, note, created_at
               FROM leave_records
-             WHERE employee_id = %s
-               AND leave_type   = %s
+             WHERE employee_id=%s
+               AND leave_type=%s
              ORDER BY date_from DESC
         ''', (emp_id, leave_type))
-        records = c.fetchall()
+        rows = c.fetchall()
+
+    # 3. 組成 SimpleNamespace list，讓模板能用 r.id、r.start_date 等
+    records = []
+    for rid, df, dt, days, note, created in rows:
+        records.append(SimpleNamespace(
+            id=rid,
+            start_date=df.strftime('%Y-%m-%d'),
+            end_date=dt.strftime('%Y-%m-%d'),
+            days=days,
+            note=note or '',
+            created_at=created.strftime('%Y-%m-%d %H:%M')
+        ))
 
     return render_template('history.html',
                            emp_id=emp_id,
@@ -513,90 +467,67 @@ def leave_history(emp_id, leave_type):
                            leave_type=leave_type,
                            records=records)
 
-@app.route('/record_leave/<int:emp_id>', methods=['POST'])
-def record_leave(emp_id):
-    """新增一筆請假紀錄（內部用）"""
-    init_db()
-    lt   = request.form['leave_type']
-    df   = request.form['date_from']
-    dt   = request.form['date_to']
-    days = int(request.form['days'])
-    note = request.form.get('note','')
-    with get_conn() as conn, conn.cursor() as c:
-        c.execute('''
-            INSERT INTO leave_records
-              (employee_id, leave_type, date_from, date_to, days, note)
-            VALUES (%s,%s,%s,%s,%s,%s)
-        ''', (emp_id, lt, df, dt, days, note))
-        conn.commit()
-    return redirect(url_for('leave_history',
-                            emp_id=emp_id,
-                            leave_type=lt))
 
-@app.route('/history/<int:emp_id>/<leave_type>/edit/<int:record_id>', methods=['GET','POST'])
-def edit_leave_record(emp_id, leave_type, record_id):
-    init_db()
-
-    # POST：處理表單送出，更新資料庫
-    if request.method == 'POST':
-        start_date = request.form['start_date']
-        end_date   = request.form['end_date']
-        days       = int(request.form['days'])
-        note       = request.form.get('note','')
-        with get_conn() as conn, conn.cursor() as c:
-            c.execute('''
-                UPDATE leave_records
-                   SET date_from = %s,
-                       date_to   = %s,
-                       days      = %s,
-                       note      = %s
-                 WHERE id = %s
-            ''', (start_date, end_date, days, note, record_id))
-            conn.commit()
-        return redirect(url_for('leave_history', emp_id=emp_id, leave_type=leave_type))
-
-    # GET：讀出現有紀錄，填入表單
-    with get_conn() as conn, conn.cursor() as c:
-        c.execute('''
-            SELECT date_from, date_to, days, note
-              FROM leave_records
-             WHERE id = %s
-        ''', (record_id,))
-        rec = c.fetchone()
-
-    # 渲染編輯表單
-    return render_template('edit_leave.html',
-                           emp_id=emp_id,
-                           leave_type=leave_type,
-                           record_id=record_id,
-                           date_from=rec[0].strftime('%Y-%m-%d'),
-                           date_to  =rec[1].strftime('%Y-%m-%d'),
-                           days     =rec[2],
-                           note     =rec[3] or '')
-
-@app.route('/history/<int:emp_id>/<leave_type>/add', methods=['GET', 'POST'])
+@app.route('/history/<int:emp_id>/<leave_type>/add', methods=['GET','POST'])
 def add_leave_record(emp_id, leave_type):
     init_db()
     if request.method == 'POST':
-        date_from = request.form['start_date']
-        date_to   = request.form['end_date']
-        days      = int(request.form['days'])
-        note      = request.form.get('note', '')
+        df   = request.form['start_date']
+        dt   = request.form['end_date']
+        days = int(request.form['days'])
+        note = request.form.get('note','')
         with get_conn() as conn, conn.cursor() as c:
             c.execute('''
                 INSERT INTO leave_records
                   (employee_id, leave_type, date_from, date_to, days, note)
-                VALUES (%s,         %s,         %s,        %s,      %s,   %s)
-            ''', (emp_id, leave_type, date_from, date_to, days, note))
+                VALUES (%s,%s,%s,%s,%s,%s)
+            ''', (emp_id, leave_type, df, dt, days, note))
             conn.commit()
-        return redirect(url_for('leave_history', emp_id=emp_id, leave_type=leave_type))
+        return redirect(url_for('leave_history',
+                                emp_id=emp_id,
+                                leave_type=leave_type))
 
-    # GET：直接渲染新增表单
-    return render_template(
-        'add_leave.html',
-        emp_id=emp_id,
-        leave_type=leave_type
-    )
+    # GET：顯示新增表單
+    return render_template('add_leave.html',
+                           emp_id=emp_id,
+                           leave_type=leave_type)
+
+
+@app.route('/history/<int:emp_id>/<leave_type>/edit/<int:record_id>', methods=['GET','POST'])
+def edit_leave_record(emp_id, leave_type, record_id):
+    init_db()
+    if request.method == 'POST':
+        df   = request.form['start_date']
+        dt   = request.form['end_date']
+        days = int(request.form['days'])
+        note = request.form.get('note','')
+        with get_conn() as conn, conn.cursor() as c:
+            c.execute('''
+                UPDATE leave_records
+                   SET date_from = %s, date_to = %s, days = %s, note = %s
+                 WHERE id = %s
+            ''', (df, dt, days, note, record_id))
+            conn.commit()
+        return redirect(url_for('leave_history',
+                                emp_id=emp_id,
+                                leave_type=leave_type))
+
+    # GET：讀一筆紀錄填到表單
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute('''
+            SELECT date_from, date_to, days, note
+              FROM leave_records
+             WHERE id=%s
+        ''', (record_id,))
+        df, dt, days, note = c.fetchone()
+    return render_template('edit_leave.html',
+                           emp_id=emp_id,
+                           leave_type=leave_type,
+                           record_id=record_id,
+                           start_date=df.strftime('%Y-%m-%d'),
+                           end_date=dt.strftime('%Y-%m-%d'),
+                           days=days,
+                           note=note or '')
 
 
 
