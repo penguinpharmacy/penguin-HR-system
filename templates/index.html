@@ -7,7 +7,6 @@
 </head>
 <body class="p-4">
   <h1 class="text-2xl mb-4">員工特休總覽</h1>
-  <!-- 切換在職 / 全部 -->
   <div class="mb-4">
     <a href="/?all={{ '0' if show_all else '1' }}" class="text-blue-600">
       {{ '顯示在職員工' if show_all else '顯示所有員工（含離職）' }}
@@ -59,7 +58,7 @@
         <td>
           <a href="{{ url_for('edit_employee', emp_id=e.id) }}">編輯</a>
           {% if e.is_active %}
-            <a href="{{ url_for('delete_employee', emp_id=e.id) }}" class="ml-2 text-red-600" onclick="return confirm('確定要封存此員工？');">刪除</a>
+          <a href="{{ url_for('delete_employee', emp_id=e.id) }}" class="ml-2 text-red-600" onclick="return confirm('確定要封存此員工？');">刪除</a>
           {% endif %}
         </td>
       </tr>
