@@ -121,6 +121,23 @@ def init_db():
         conn.commit()
 
 
+        # 新增請假紀錄表
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS leave_records (
+              id           SERIAL PRIMARY KEY,
+              employee_id  INTEGER REFERENCES employees(id),
+              leave_type   TEXT    NOT NULL,     -- "特休"/"病假"/"事假"/"婚假"
+              date_from    DATE    NOT NULL,
+              date_to      DATE    NOT NULL,
+              days         INTEGER NOT NULL,
+              note         TEXT,
+              created_at   TIMESTAMP DEFAULT NOW()
+            );
+        ''')
+        conn.commit()
+
+
+
 @app.route('/')
 def index():
     """員工特休總覽：預設只顯示在職，?all=1 則顯示所有（含離職）"""
