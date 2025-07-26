@@ -471,6 +471,51 @@ def restore_employee(emp_id):
         conn.commit()
     return redirect(url_for('index', all='1'))
 
+@app.route('/history/<int:emp_id>/<leave_type>')
+def leave_history(emp_id, leave_type):
+    """顯示某員工某假別的歷史紀錄，並提供新增紀錄表單（內部使用）"""
+    init_db()
+    # 抓員工姓名
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute('SELECT name FROM employees WHERE id=%s', (emp_id,))
+        name = c.fetchone()[0]
+
+    # 抓請假紀錄
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute('''
+            SELECT date_from, date_to, days, note, created_at
+              FROM leave_records
+             WHERE employee_id = %s
+               AND leave_type   = %s
+             ORDER BY date_from DESC
+        ''', (emp_id, leave_type))
+        records = c.fetchall()
+
+    return render_template('history.html',
+                           emp_id=emp_id,
+                           name=name,
+                           leave_type=leave_type,
+                           records=records)
+
+@app.route('/record_leave/<int:emp_id>', methods=['POST'])
+def record_leave(emp_id):
+    """新增一筆請假紀錄（內部用）"""
+    init_db()
+    lt   = request.form['leave_type']
+    df   = request.form['date_from']
+    dt   = request.form['date_to']
+    days = int(request.form['days'])
+    note = request.form.get('note','')
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute('''
+            INSERT INTO leave_records
+              (employee_id, leave_type, date_from, date_to, days, note)
+            VALUES (%s,%s,%s,%s,%s,%s)
+        ''', (emp_id, lt, df, dt, days, note))
+        conn.commit()
+    return redirect(url_for('leave_history',
+                            emp_id=emp_id,
+                            leave_type=lt))
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
