@@ -5,6 +5,8 @@ import os
 import psycopg
 import socket
 from urllib.parse import urlparse
+from types import SimpleNamespace
+
 
 app = Flask(__name__)
 
