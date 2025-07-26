@@ -373,15 +373,19 @@ def edit_insurance(emp_id):
                     WHERE employee_id = %s
                 ''',(pl,ph,cl,ch,r6,oi,tot,note,emp_id))
             else:
-                c.execute('''
-                    INSERT INTO insurances (
-                      employee_id,
-                      personal_labour, personal_health,
-                      company_labour,  company_health,
-                      retirement6,     occupational_ins,
-                      total_company,   note
-                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                ''',(emp_id,pl,ph,cl,ch,r6,oi,tot,note))
+ # 手動呼叫 sequence 產生 id，避免 NULL
+            c.execute('''
+                INSERT INTO insurances (
+                employee_id,
+                personal_labour, personal_health,
+                company_labour,  company_health,
+                retirement6,     occupational_ins,
+                total_company,   note
+              ) VALUES (
+                nextval(pg_get_serial_sequence('insurances','id')),
+                %s, %s, %s, %s, %s, %s, %s, %s, %s
+              )
+              ''', (emp_id,pl,ph,cl,ch,r6,oi,tot,note))
             conn.commit()
         return redirect(url_for('list_insurance'))
 
