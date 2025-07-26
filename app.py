@@ -378,7 +378,7 @@ def edit_insurance(emp_id):
         note              = request.form.get('note','')
 
         with get_conn() as conn, conn.cursor() as c:
-            # 如果已存在就 UPDATE
+            # 如果已存在，就 UPDATE
             c.execute('SELECT id FROM insurances WHERE employee_id=%s', (emp_id,))
             if c.fetchone():
                 c.execute('''
@@ -404,22 +404,19 @@ def edit_insurance(emp_id):
                     emp_id
                 ))
             else:
-                # 否則 INSERT，強制 id 用 DEFAULT
+                # 否則 INSERT，只列出要塞值的欄位（employee_id 開頭）
                 c.execute('''
                     INSERT INTO insurances (
-                      id,
+                      employee_id,
                       personal_labour, personal_health,
                       company_labour, company_health,
                       retirement6, occupational_ins,
-                      total_company, note, employee_id
+                      total_company, note
                     ) VALUES (
-                      DEFAULT,
-                      %s, %s,
-                      %s, %s,
-                      %s, %s,
-                      %s, %s, %s
+                      %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
                 ''', (
+                    emp_id,
                     personal_labour,
                     personal_health,
                     company_labour,
@@ -427,21 +424,29 @@ def edit_insurance(emp_id):
                     retirement6,
                     occupational_ins,
                     total_company,
-                    note,
-                    emp_id
+                    note
                 ))
             conn.commit()
 
         return redirect(url_for('list_insurance'))
 
-    # GET：讀出現有值（若無則初始為 0 且 note 空字串）
+    # GET：讀出現有值，若無則給預設
     with get_conn() as conn, conn.cursor() as c:
-        c.execute('SELECT id, employee_id, personal_labour, personal_health, company_labour, company_health, retirement6, occupational_ins, total_company, note FROM insurances WHERE employee_id=%s', (emp_id,))
+        c.execute('''
+            SELECT id, employee_id,
+                   personal_labour, personal_health,
+                   company_labour, company_health,
+                   retirement6, occupational_ins,
+                   total_company, note
+              FROM insurances
+             WHERE employee_id=%s
+        ''', (emp_id,))
         r = c.fetchone() or [None, emp_id, 0, 0, 0, 0, 0, 0, 0, '']
 
     return render_template('edit_insurance.html',
                            emp_id=emp_id,
                            ins=r)
+
 
 @app.route('/delete/<int:emp_id>')
 def delete_employee(emp_id):
