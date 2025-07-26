@@ -84,6 +84,16 @@ def init_db():
             );
         ''')
         conn.commit()
+        # 確保 insurances.id 有 default 序列
+        c.execute("""
+             ALTER TABLE insurances
+             ALTER COLUMN id
+             SET DEFAULT nextval(pg_get_serial_sequence('insurances','id'));
+        """)
+        conn.commit()
+
+
+        
 
         # —— 新增請假紀錄表 leave_records （只要宣告一次） —— 
         c.execute('''
