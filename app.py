@@ -568,6 +568,86 @@ def salary_detail(emp_id):
                            total_company=total,
                            note=note)
 
+@app.route('/insurance/edit/<int:emp_id>', methods=['GET','POST'])
+def edit_insurance(emp_id):
+    init_db()
+    if request.method == 'POST':
+        # 讀表單
+        personal_labour   = int(request.form.get('personal_labour') or 0)
+        personal_health   = int(request.form.get('personal_health') or 0)
+        company_labour    = int(request.form.get('company_labour') or 0)
+        company_health    = int(request.form.get('company_health') or 0)
+        retirement6       = int(request.form.get('retirement6') or 0)
+        occupational_ins  = int(request.form.get('occupational_ins') or 0)
+        total_company     = int(request.form.get('total_company') or 0)
+        note              = request.form.get('note','')
+
+        with get_conn() as conn, conn.cursor() as c:
+            # 如果已存在就 UPDATE
+            c.execute('SELECT id FROM insurances WHERE employee_id=%s', (emp_id,))
+            if c.fetchone():
+                c.execute('''
+                    UPDATE insurances SET
+                      personal_labour   = %s,
+                      personal_health   = %s,
+                      company_labour    = %s,
+                      company_health    = %s,
+                      retirement6       = %s,
+                      occupational_ins  = %s,
+                      total_company     = %s,
+                      note              = %s
+                    WHERE employee_id = %s
+                ''', (
+                    personal_labour,
+                    personal_health,
+                    company_labour,
+                    company_health,
+                    retirement6,
+                    occupational_ins,
+                    total_company,
+                    note,
+                    emp_id
+                ))
+            else:
+                # 否則 INSERT，強制 id 用 DEFAULT
+                c.execute('''
+                    INSERT INTO insurances (
+                      id,
+                      personal_labour, personal_health,
+                      company_labour, company_health,
+                      retirement6, occupational_ins,
+                      total_company, note, employee_id
+                    ) VALUES (
+                      DEFAULT,
+                      %s, %s,
+                      %s, %s,
+                      %s, %s,
+                      %s, %s, %s
+                    )
+                ''', (
+                    personal_labour,
+                    personal_health,
+                    company_labour,
+                    company_health,
+                    retirement6,
+                    occupational_ins,
+                    total_company,
+                    note,
+                    emp_id
+                ))
+            conn.commit()
+
+        return redirect(url_for('list_insurance'))
+
+    # GET：讀出現有值（若無則初始為 0 且 note 空字串）
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute('SELECT id, employee_id, personal_labour, personal_health, company_labour, company_health, retirement6, occupational_ins, total_company, note FROM insurances WHERE employee_id=%s', (emp_id,))
+        r = c.fetchone() or [None, emp_id, 0, 0, 0, 0, 0, 0, 0, '']
+
+    return render_template('edit_insurance.html',
+                           emp_id=emp_id,
+                           ins=r)
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
