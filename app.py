@@ -43,6 +43,11 @@ def init_db():
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS used_personal INTEGER;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS entitled_marriage INTEGER;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS used_marriage INTEGER;")
+        c.execute("""
+            ALTER TABLE insurances
+            ALTER COLUMN id
+            SET DEFAULT nextval(pg_get_serial_sequence('insurances','id'));
+        """)
         conn.commit()
 
         # 建立 employees 表（若不存在）
