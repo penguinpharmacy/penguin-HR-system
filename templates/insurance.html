@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>保險負擔總覽</title>
+  <link href="/static/style.css" rel="stylesheet">
+</head>
+<body class="p-4">
+  <h1 class="text-2xl mb-4">保險負擔總覽</h1>
+  <div class="mb-4">
+    <a href="/" class="text-blue-600">← 返回特休總覽</a>
+    <a href="/add" class="ml-4 text-purple-600">新增員工</a>
+  </div>
+  <table class="min-w-full border">
+    <thead>
+      <tr>
+        <th>姓名</th>
+        <th>個人勞保</th>
+        <th>個人健保</th>
+        <th>公司勞保</th>
+        <th>公司健保</th>
+        <th>退休金 (6%)</th>
+        <th>職業工會費</th>
+        <th>公司負擔總額</th>
+        <th>備註</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for emp_id, name, pl, ph, cl, ch, r6, oi, tc, note in items %}
+      <tr class="border-t">
+        <td>{{ name }}</td>
+        <td>{{ pl or 0 }}</td>
+        <td>{{ ph or 0 }}</td>
+        <td>{{ cl or 0 }}</td>
+        <td>{{ ch or 0 }}</td>
+        <td>{{ r6 or 0 }}</td>
+        <td>{{ oi or 0 }}</td>
+        <td>{{ tc or 0 }}</td>
+        <td>{{ note or '' }}</td>
+        <td>
+          <a href="{{ url_for('edit_insurance', emp_id=emp_id) }}" class="text-blue-600">編輯</a>
+        </td>
+      </tr>
+      {% endfor %}
+      {% if items|length == 0 %}
+      <tr><td colspan="10" class="text-center py-4">尚無保險負擔資料</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</body>
+</html>
