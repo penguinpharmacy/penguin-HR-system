@@ -517,6 +517,39 @@ def record_leave(emp_id):
                             emp_id=emp_id,
                             leave_type=lt))
 
+@app.route('/history/<int:emp_id>/<leave_type>/edit/<int:record_id>', methods=['GET','POST'])
+def edit_leave_record(emp_id, leave_type, record_id):
+    init_db()
+
+    # POST：處理表單送出，更新資料庫
+    if request.method == 'POST':
+        start_date = request.form['start_date']
+        end_date   = request.form['end_date']
+        days       = int(request.form['days'])
+        note       = request.form.get('note','')
+        with get_conn() as conn, conn.cursor() as c:
+            c.execute('''
+                UPDATE leave_records
+                   SET start_date = %s,
+                       end_date   = %s,
+                       days       = %s,
+                       note       = %s
+                 WHERE id = %s
+            ''', (start_date, end_date, days, note, record_id))
+            conn.commit()
+        return redirect(url_for('leave_history', emp_id=emp_id, leave_type=leave_type))
+
+    # GET：讀出現有紀錄，填入表單
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute('SELECT id, start_date, end_date, days, note FROM leave_records WHERE id=%s',
+                  (record_id,))
+        record = c.fetchone()
+    return render_template('edit_leave.html',
+                           emp_id=emp_id,
+                           leave_type=leave_type,
+                           r=record)
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
