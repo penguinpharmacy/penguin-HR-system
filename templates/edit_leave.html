@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{ emp_name }} — {{ leave_type }} 編輯</title>
+  <link href="/static/style.css" rel="stylesheet">
+</head>
+<body class="p-4">
+  <h1>{{ emp_name }} — {{ leave_type }} 編輯</h1>
+  <a href="{{ url_for('leave_history', emp_id=emp_id, leave_type=leave_type) }}">← 返回紀錄</a>
+
+  <form action="" method="post" class="mt-4 space-y-4">
+    <div>
+      <label>開始日期：
+        <input type="date" name="start_date" value="{{ r[1] }}" required>
+      </label>
+    </div>
+    <div>
+      <label>結束日期：
+        <input type="date" name="end_date" value="{{ r[2] }}" required>
+      </label>
+    </div>
+    <div>
+      <label>天數：
+        <input type="number" name="days" value="{{ r[3] }}" min="0" required>
+      </label>
+    </div>
+    <div>
+      <label>備註：
+        <input type="text" name="note" value="{{ r[4] }}">
+      </label>
+    </div>
+    <div>
+      <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded">儲存修改</button>
+      <a href="{{ url_for('leave_history', emp_id=emp_id, leave_type=leave_type) }}" class="ml-4 text-gray-600">取消</a>
+    </div>
+  </form>
+</body>
+</html>
