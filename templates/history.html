@@ -46,6 +46,7 @@
         <th>天數</th>
         <th>備註</th>
         <th>申請時間</th>
+        <th>操作</th>
       </tr>
     </thead>
     <tbody>
@@ -56,6 +57,13 @@
         <td>{{ days }}</td>
         <td>{{ note or '-' }}</td>
         <td>{{ created }}</td>
+        <td>
+          <a href="{{ url_for('edit_leave_record',
+                               emp_id=emp_id,
+                               leave_type=leave_type,
+                               record_id=r.id) }}"
+             class="text-blue-600">編輯</a>
+        </td>
       </tr>
       {% else %}
       <tr><td colspan="5" class="text-center py-4">尚無紀錄</td></tr>
