@@ -32,8 +32,8 @@ def entitled_sick_days(years, months):
     return 30
 
 def entitled_personal_days(years, months):
-    """依勞基法，每年可用事假上限為7天"""
-    return 7
+    """依勞基法，每年可用事假上限為14天"""
+    return 14
 
 def entitled_marriage_days():
     """依勞基法，婚假一次給8天"""
