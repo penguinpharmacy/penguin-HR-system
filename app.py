@@ -347,19 +347,22 @@ def list_insurance():
 @app.route('/insurance/edit/<int:emp_id>', methods=['GET','POST'])
 def edit_insurance(emp_id):
     init_db()
-    if request.method=='POST':
+    if request.method == 'POST':
         # 讀表單
-        pl  = int(request.form.get('personal_labour') or 0)
-        ph  = int(request.form.get('personal_health') or 0)
-        cl  = int(request.form.get('company_labour') or 0)
-        ch  = int(request.form.get('company_health') or 0)
-        r6  = int(request.form.get('retirement6') or 0)
-        oi  = int(request.form.get('occupational_ins') or 0)
-        tot = int(request.form.get('total_company') or 0)
+        pl  = int(request.form.get('personal_labour')   or 0)
+        ph  = int(request.form.get('personal_health')   or 0)
+        cl  = int(request.form.get('company_labour')    or 0)
+        ch  = int(request.form.get('company_health')    or 0)
+        r6  = int(request.form.get('retirement6')       or 0)
+        oi  = int(request.form.get('occupational_ins')  or 0)
+        tot = int(request.form.get('total_company')     or 0)
         note= request.form.get('note','')
+
         with get_conn() as conn, conn.cursor() as c:
+            # 先看有沒有既存紀錄
             c.execute('SELECT id FROM insurances WHERE employee_id=%s', (emp_id,))
             if c.fetchone():
+                # 已存在 → UPDATE
                 c.execute('''
                     UPDATE insurances SET
                       personal_labour  = %s,
@@ -371,25 +374,27 @@ def edit_insurance(emp_id):
                       total_company    = %s,
                       note             = %s
                     WHERE employee_id = %s
-                ''',(pl,ph,cl,ch,r6,oi,tot,note,emp_id))
+                ''', (pl, ph, cl, ch, r6, oi, tot, note, emp_id))
             else:
- # 手動呼叫 sequence 產生 id，避免 NULL
-            c.execute('''
-                INSERT INTO insurances (
-                employee_id,
-                personal_labour, personal_health,
-                company_labour,  company_health,
-                retirement6,     occupational_ins,
-                total_company,   note
-              ) VALUES (
-                nextval(pg_get_serial_sequence('insurances','id')),
-                %s, %s, %s, %s, %s, %s, %s, %s, %s
-              )
-              ''', (emp_id,pl,ph,cl,ch,r6,oi,tot,note))
+                # 不存在 → INSERT，手動用 sequence 產生 id
+                c.execute('''
+                    INSERT INTO insurances (
+                      id,
+                      employee_id,
+                      personal_labour, personal_health,
+                      company_labour,  company_health,
+                      retirement6,     occupational_ins,
+                      total_company,   note
+                    ) VALUES (
+                      nextval(pg_get_serial_sequence('insurances','id')),
+                      %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                ''', (emp_id, pl, ph, cl, ch, r6, oi, tot, note))
             conn.commit()
+
         return redirect(url_for('list_insurance'))
 
-    # GET：讀現有或預設
+    # GET：載入既有或預設值
     with get_conn() as conn, conn.cursor() as c:
         c.execute('''
             SELECT id, employee_id,
@@ -397,10 +402,15 @@ def edit_insurance(emp_id):
                    company_labour, company_health,
                    retirement6, occupational_ins,
                    total_company, note
-              FROM insurances WHERE employee_id=%s
-        ''',(emp_id,))
-        r = c.fetchone() or [None,emp_id,0,0,0,0,0,0,0,'']
-    return render_template('edit_insurance.html', emp_id=emp_id, ins=r)
+              FROM insurances
+             WHERE employee_id=%s
+        ''', (emp_id,))
+        r = c.fetchone() or [None, emp_id, 0, 0, 0, 0, 0, 0, 0, '']
+
+    return render_template('edit_insurance.html',
+                           emp_id=emp_id,
+                           ins=r)
+
 
 @app.route('/delete/<int:emp_id>')
 def delete_employee(emp_id):
