@@ -272,7 +272,7 @@ def list_insurance():
 def edit_insurance(emp_id):
     init_db()
     if request.method == 'POST':
-        # 讀表單
+        # 1. 讀表單
         pl  = int(request.form.get('personal_labour')   or 0)
         ph  = int(request.form.get('personal_health')   or 0)
         cl  = int(request.form.get('company_labour')    or 0)
@@ -283,10 +283,10 @@ def edit_insurance(emp_id):
         note= request.form.get('note','')
 
         with get_conn() as conn, conn.cursor() as c:
-            # 先看有沒有既存紀錄
+            # 檢查是否已有這位員工的保險記錄
             c.execute('SELECT id FROM insurances WHERE employee_id=%s', (emp_id,))
             if c.fetchone():
-                # 已存在 → UPDATE
+                # 已存在則 UPDATE
                 c.execute('''
                     UPDATE insurances SET
                       personal_labour  = %s,
@@ -300,17 +300,15 @@ def edit_insurance(emp_id):
                     WHERE employee_id = %s
                 ''', (pl, ph, cl, ch, r6, oi, tot, note, emp_id))
             else:
-                # 不存在 → INSERT，手動用 sequence 產生 id
+                # 不存在則 INSERT，不帶 id，由 PostgreSQL 自動帶 DEFAULT nextval(...)
                 c.execute('''
                     INSERT INTO insurances (
-                      id,
                       employee_id,
                       personal_labour, personal_health,
                       company_labour,  company_health,
                       retirement6,     occupational_ins,
                       total_company,   note
                     ) VALUES (
-                      nextval(pg_get_serial_sequence('insurances','id')),
                       %s, %s, %s, %s, %s, %s, %s, %s, %s
                     )
                 ''', (emp_id, pl, ph, cl, ch, r6, oi, tot, note))
@@ -318,7 +316,7 @@ def edit_insurance(emp_id):
 
         return redirect(url_for('list_insurance'))
 
-    # GET：載入既有或預設值
+    # GET：載入既有資料或給預設值
     with get_conn() as conn, conn.cursor() as c:
         c.execute('''
             SELECT id, employee_id,
