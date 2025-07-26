@@ -67,19 +67,7 @@ def init_db():
         ''')
         conn.commit()
 
-      # 1) 先確保欄位都存在（ALTER TABLE IF NOT EXISTS）
-        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS personal_labour INTEGER DEFAULT 0;")
-        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS personal_health INTEGER DEFAULT 0;")
-        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS company_labour INTEGER DEFAULT 0;")
-        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS company_health INTEGER DEFAULT 0;")
-        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS retirement6 INTEGER DEFAULT 0;")
-        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS occupational_ins INTEGER DEFAULT 0;")
-        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS total_company INTEGER DEFAULT 0;")
-        c.execute("ALTER TABLE insurances ADD COLUMN IF NOT EXISTS note TEXT DEFAULT '';")
-        conn.commit()
-
-        # 2) 建表（若不存在則建立，包括 SERIAL PRIMARY KEY）
-        c.execute('''
+        c.execute("""
             CREATE TABLE IF NOT EXISTS insurances (
               id SERIAL PRIMARY KEY,
               employee_id INTEGER UNIQUE REFERENCES employees(id),
@@ -92,22 +80,24 @@ def init_db():
               total_company INTEGER DEFAULT 0,
               note TEXT DEFAULT ''
             );
-        ''')
-        conn.commit()
-
-        # 3) 確保 id 欄位有正確的 DEFAULT 序列
-        c.execute("""
-          ALTER TABLE insurances
-            ALTER COLUMN id
-            SET DEFAULT nextval(pg_get_serial_sequence('insurances','id'));
-        """)
-        # （可選）設定 sequence 的 ownership
-        c.execute("""
-          ALTER SEQUENCE insurances_id_seq
-            OWNED BY insurances.id;
         """)
         conn.commit()
 
+        # 2) 如果 sequence 不存在就建立，並把它設為 id 欄位的預設值
+        c.execute("CREATE SEQUENCE IF NOT EXISTS insurances_id_seq;")
+        c.execute("""
+            ALTER TABLE insurances
+              ALTER COLUMN id
+              SET DEFAULT nextval('insurances_id_seq');
+        """)
+        conn.commit()
+
+        # 3) 把 sequence 綁定給 insurances.id
+        c.execute("""
+            ALTER SEQUENCE insurances_id_seq
+              OWNED BY insurances.id;
+        """)
+        conn.commit()
         
 
         # —— 新增請假紀錄表 leave_records （只要宣告一次） —— 
