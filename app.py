@@ -123,43 +123,66 @@ def init_db():
 
 @app.route('/')
 def index():
-    """員工特休總覽"""
+    """員工特休總覽：預設只顯示在職，?all=1 則顯示所有（含離職）"""
     init_db()
+
+    # 讀 query string 決定要不要顯示所有員工
+    show_all = (request.args.get('all') == '1')
+
     with get_conn() as conn, conn.cursor() as c:
-        c.execute('''
-            SELECT
-                id, name, start_date, end_date, department,
-                job_level, salary_grade, base_salary, position_allowance,
-                on_leave_suspend, used_leave,
-                entitled_sick, used_sick,
-                entitled_personal, used_personal,
-                entitled_marriage, used_marriage
-            FROM employees
-        ''')
+        if show_all:
+            c.execute('''
+                SELECT
+                    id, name, start_date, end_date,
+                    department, job_level,
+                    salary_grade, base_salary, position_allowance,
+                    on_leave_suspend, used_leave, entitled_leave,
+                    entitled_sick, used_sick,
+                    entitled_personal, used_personal,
+                    entitled_marriage, used_marriage,
+                    is_active
+                FROM employees
+                ORDER BY id
+            ''')
+        else:
+            c.execute('''
+                SELECT
+                    id, name, start_date, end_date,
+                    department, job_level,
+                    salary_grade, base_salary, position_allowance,
+                    on_leave_suspend, used_leave, entitled_leave,
+                    entitled_sick, used_sick,
+                    entitled_personal, used_personal,
+                    entitled_marriage, used_marriage,
+                    is_active
+                FROM employees
+                WHERE is_active = TRUE
+                ORDER BY id
+            ''')
         rows = c.fetchall()
 
     employees = []
     for (sid, name, sd, ed, dept,
          level, grade, base, allowance,
-         suspend, used,
+         suspend, used, entitled,
          sick_ent, sick_used,
          per_ent, per_used,
-         mar_ent, mar_used) in rows:
+         mar_ent, mar_used,
+         is_active) in rows:
 
-        # 將 None 轉成 0
-        sick_ent   = sick_ent   or 0
-        sick_used  = sick_used  or 0
-        per_ent    = per_ent    or 0
-        per_used   = per_used   or 0
-        mar_ent    = mar_ent    or 0
-        mar_used   = mar_used   or 0
+        # 把 None 變 0
+        sick_ent  = sick_ent  or 0
+        sick_used = sick_used or 0
+        per_ent   = per_ent   or 0
+        per_used  = per_used  or 0
+        mar_ent   = mar_ent   or 0
+        mar_used  = mar_used  or 0
 
-        # 計算年資：若有離職日，用離職日；否則用到職日
+        # 計算年資（如果要用離職日，ref_date 就是 ed；否則用 sd）
         ref_date = ed or sd
         if isinstance(ref_date, str):
             ref_date = datetime.strptime(ref_date, '%Y-%m-%d').date()
         years, months = calculate_seniority(ref_date)
-        entitled = entitled_leave_days(years, months, suspend)
 
         employees.append({
             'id': sid,
@@ -186,9 +209,14 @@ def index():
             'entitled_marriage': mar_ent,
             'used_marriage': mar_used,
             'remaining_marriage': max(mar_ent - mar_used, 0),
+            'is_active': is_active,
         })
 
-    return render_template('index.html', employees=employees)
+    # 一併把 show_all 傳給模板，讓按鈕能切換
+    return render_template('index.html',
+                           employees=employees,
+                           show_all=show_all)
+
 
 @app.route('/add', methods=['GET','POST'])
 def add_employee():
