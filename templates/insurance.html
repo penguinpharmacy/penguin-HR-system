@@ -7,8 +7,9 @@
 </head>
 <body class="p-4">
   <h1 class="text-2xl mb-4">保險負擔總覽</h1>
-  <a href="{{ url_for('index') }}">← 返回特休總覽</a>
+  <a href="{{ url_for('index') }}" class="text-purple-600">← 返回特休總覽</a>
   <a href="{{ url_for('add_employee') }}" class="ml-4 text-purple-600">新增員工</a>
+
   <table class="min-w-full border mt-4">
     <thead>
       <tr>
@@ -17,35 +18,37 @@
         <th>個人健保</th>
         <th>公司勞保</th>
         <th>公司健保</th>
-        <th>退休金（6%）</th>
-        <th>職業工會費</th>
+        <th>退休金 (6%)</th>
+        <th>職保</th>
         <th>公司負擔總額</th>
         <th>備註</th>
         <th>操作</th>
       </tr>
     </thead>
     <tbody>
-      {% for id, name, pl, ph, cl, ch, ret6, occu, total, note in items %}
+      {% for emp_id, name, pl, ph, cl, ch, r6, oi, tc, note in items %}
       <tr class="border-t">
         <td>{{ name }}</td>
         <td>{{ pl }}</td>
         <td>{{ ph }}</td>
         <td>{{ cl }}</td>
         <td>{{ ch }}</td>
-        <td>{{ ret6 }}</td>
-        <td>{{ occu }}</td>
-        <td>{{ total }}</td>
+        <td>{{ r6 }}</td>
+        <td>{{ oi }}</td>
+        <td>{{ tc }}</td>
         <td>{{ note }}</td>
         <td>
-          <a href="{{ url_for('edit_insurance', emp_id=id) }}" class="text-blue-600">編輯</a>
+          <a href="{{ url_for('edit_insurance', emp_id=emp_id) }}"
+             class="text-blue-600">編輯</a>
         </td>
       </tr>
       {% endfor %}
-      {% if items|length == 0 %}
-      <tr><td colspan="10" class="py-4 text-center">尚無任何保險負擔紀錄</td></tr>
+      {% if not items %}
+      <tr><td colspan="10" class="text-center py-4">尚無資料</td></tr>
       {% endif %}
     </tbody>
   </table>
 </body>
 </html>
+
 
