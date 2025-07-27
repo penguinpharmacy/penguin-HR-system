@@ -491,16 +491,16 @@ def leave_history(emp_id, leave_type):
         ''', (emp_id, leave_type))
         rows = c.fetchall()
 
-    # 3. 組成 SimpleNamespace list，讓模板能用 r.id、r.start_date 等
+    # 3. 用 SimpleNamespace 包裝，屬性要對應到 template 的 start_date/end_date
     records = []
     for rid, df, dt, days, note, created in rows:
         records.append(SimpleNamespace(
             id=rid,
-            start_date=df.strftime('%Y-%m-%d'),
-            end_date=dt.strftime('%Y-%m-%d'),
-            days=days,
-            note=note or '',
-            created_at=created.strftime('%Y-%m-%d %H:%M')
+            start_date = df.strftime('%Y-%m-%d'),
+            end_date   = dt.strftime('%Y-%m-%d'),
+            days       = days,
+            note       = note or '',
+            created_at = created.strftime('%Y-%m-%d %H:%M')
         ))
 
     return render_template('history.html',
@@ -508,7 +508,6 @@ def leave_history(emp_id, leave_type):
                            name=name,
                            leave_type=leave_type,
                            records=records)
-
 
 @app.route('/history/<int:emp_id>/<leave_type>/add', methods=['GET','POST'])
 def add_leave_record(emp_id, leave_type):
@@ -525,15 +524,11 @@ def add_leave_record(emp_id, leave_type):
                 VALUES (%s,%s,%s,%s,%s,%s)
             ''', (emp_id, leave_type, df, dt, days, note))
             conn.commit()
-        return redirect(url_for('leave_history',
-                                emp_id=emp_id,
-                                leave_type=leave_type))
+        return redirect(url_for('leave_history', emp_id=emp_id, leave_type=leave_type))
 
-    # GET：顯示新增表單
     return render_template('add_leave.html',
                            emp_id=emp_id,
                            leave_type=leave_type)
-
 
 @app.route('/history/<int:emp_id>/<leave_type>/edit/<int:record_id>', methods=['GET','POST'])
 def edit_leave_record(emp_id, leave_type, record_id):
@@ -546,13 +541,14 @@ def edit_leave_record(emp_id, leave_type, record_id):
         with get_conn() as conn, conn.cursor() as c:
             c.execute('''
                 UPDATE leave_records
-                   SET date_from = %s, date_to = %s, days = %s, note = %s
+                   SET date_from = %s,
+                       date_to   = %s,
+                       days      = %s,
+                       note      = %s
                  WHERE id = %s
             ''', (df, dt, days, note, record_id))
             conn.commit()
-        return redirect(url_for('leave_history',
-                                emp_id=emp_id,
-                                leave_type=leave_type))
+        return redirect(url_for('leave_history', emp_id=emp_id, leave_type=leave_type))
 
     # GET：讀一筆紀錄填到表單
     with get_conn() as conn, conn.cursor() as c:
@@ -562,14 +558,15 @@ def edit_leave_record(emp_id, leave_type, record_id):
              WHERE id=%s
         ''', (record_id,))
         df, dt, days, note = c.fetchone()
+
     return render_template('edit_leave.html',
                            emp_id=emp_id,
                            leave_type=leave_type,
                            record_id=record_id,
                            start_date=df.strftime('%Y-%m-%d'),
-                           end_date=dt.strftime('%Y-%m-%d'),
-                           days=days,
-                           note=note or '')
+                           end_date  =dt.strftime('%Y-%m-%d'),
+                           days      =days,
+                           note      =note or '')
 
 @app.route('/salary/<int:emp_id>')
 def salary_detail(emp_id):
