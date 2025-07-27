@@ -7,13 +7,34 @@
 </head>
 <body class="p-4">
   <h1 class="text-2xl mb-4">{{ name }} — {{ leave_type }} 紀錄</h1>
-  <!-- 導回首頁，同時如果原本是在「顯示所有員工」狀態，就帶上 all=1 -->
-  <a href="{{ url_for('index', all=request.args.get('all', '0')) }}">← 返回列表</a>
+  <a href="{{ url_for('index') }}" class="text-blue-600 mb-4 inline-block">← 返回總覽</a>
 
   <form action="{{ url_for('add_leave_record', emp_id=emp_id, leave_type=leave_type) }}"
         method="post"
         class="mt-4 space-y-4">
-    <!-- 你的新增請假表單... -->
+    <div>
+      <label>開始日期：
+        <input type="date" name="start_date" required class="border px-2 py-1">
+      </label>
+    </div>
+    <div>
+      <label>結束日期：
+        <input type="date" name="end_date" required class="border px-2 py-1">
+      </label>
+    </div>
+    <div>
+      <label>天數：
+        <input type="number" name="days" min="1" required class="border px-2 py-1 w-24">
+      </label>
+    </div>
+    <div>
+      <label>備註：
+        <input type="text" name="note" class="border px-2 py-1 w-full">
+      </label>
+    </div>
+    <button type="submit" class="px-4 py-2 bg-green-500 text-white rounded">
+      新增 {{ leave_type }} 紀錄
+    </button>
   </form>
 
   <table class="min-w-full border mt-6">
