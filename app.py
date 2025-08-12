@@ -144,6 +144,8 @@ def init_db():
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS used_marriage INTEGER;")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS entitled_leave_hours NUMERIC(8,1);")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS used_leave_hours NUMERIC(8,1);")
+        # employees：特休調整（小時，允許正負），預設 0
+        c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS leave_adjust_hours NUMERIC(8,1) DEFAULT 0;")
         conn.commit()
 
         # insurances
@@ -233,6 +235,7 @@ def index():
                     entitled_personal, used_personal,
                     entitled_marriage, used_marriage,
                     is_active
+                    leave_adjust_hours
                 FROM employees
                 WHERE (end_date IS NULL OR end_date >= CURRENT_DATE)
                   AND COALESCE(is_active, TRUE) = TRUE
@@ -250,7 +253,10 @@ def index():
         # 特休改用「小時」（若為空則用天數*8 回退）
         ent_h = float(ent_hours) if ent_hours is not None else float((ent_days or 0) * 8)
         used_h = float(used_hours) if used_hours is not None else float((used_days or 0) * 8)
-
+             # 加上調整值（可正可負，None 當 0）
+        adj = float(adj_hours or 0)
+        ent_h = max(ent_h_base + adj, 0.0)   # 負數保護
+             
         # 年資（沿用你的算法）
         ref_date = ed or sd
         if isinstance(ref_date, str):
