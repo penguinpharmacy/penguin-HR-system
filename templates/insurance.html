@@ -5,7 +5,7 @@
   <title>保險負擔總覽</title>
   <link href="/static/style.css" rel="stylesheet">
   <style>
-    /* 若你沒有 Tailwind，提供一些基本樣式備援 */
+    /* 簡易樣式（若無 Tailwind 也好看） */
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", "Helvetica Neue", Arial, "PingFang TC", "Microsoft JhengHei", sans-serif; }
     .p-4 { padding: 1rem; }
     .mb-4 { margin-bottom: 1rem; }
@@ -28,12 +28,18 @@
     .badge-amber { background: #fde68a; color: #92400e; }
     .right { text-align: right; }
     .flex { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .toolbar { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+    .input { border:1px solid #d1d5db; border-radius:.375rem; padding:.375rem .5rem; min-width:220px; }
+    .btn { border:1px solid #d1d5db; background:#fff; border-radius:.375rem; padding:.375rem .65rem; cursor:pointer; }
+    .btn:hover { background:#f9fafb; }
+    .btn-primary { border-color:#2563eb; color:#2563eb; }
+    .btn-primary:hover { background:#eff6ff; }
   </style>
 </head>
 <body class="p-4">
   <h1 class="text-2xl mb-4">保險負擔總覽</h1>
 
-  <!-- 導覽與篩選切換（容錯：即使後端沒傳 show_all 也能運作） -->
+  <!-- 導覽＋顯示篩選切換（容錯：後端沒傳 show_all 也能運作） -->
   <div class="mb-3 flex">
     <a href="{{ url_for('index') }}" class="text-purple-600">← 返回特休總覽</a>
     <a href="{{ url_for('add_employee') }}" class="text-purple-600">新增員工</a>
@@ -48,10 +54,18 @@
         <strong>在職員工</strong> ・
         <a href="{{ url_for('list_insurance', all='1') }}" class="text-blue-600 underline">顯示全部（含離職／停用）</a>
       {% endif %}
+      ・共 <span id="rowCount">{{ items|length }}</span> 筆
     </span>
   </div>
 
-  <table class="min-w-full border mt-2">
+  <!-- 工具列：快速搜尋 + 匯出 CSV（只匯出目前列表/篩選後的列） -->
+  <div class="toolbar mb-3">
+    <input id="searchInput" class="input" type="search" placeholder="搜尋姓名（或備註）…">
+    <button class="btn" id="clearBtn" type="button">清除搜尋</button>
+    <button class="btn btn-primary" id="exportBtn" type="button">匯出目前列表為 CSV</button>
+  </div>
+
+  <table id="insTable" class="min-w-full border mt-2">
     <thead>
       <tr>
         <th>姓名</th>
@@ -67,11 +81,11 @@
       </tr>
     </thead>
 
-    <tbody>
+    <tbody id="tbodyData">
       {% for emp_id, name, pl, ph, cl, ch, r6, oi, tc, note in items %}
       {% set no_record = (pl is none and ph is none and cl is none and ch is none and r6 is none and oi is none and tc is none) %}
       <tr>
-        <td>{{ name }}</td>
+        <td data-col="name">{{ name }}</td>
         <td class="right">{{ pl or 0 }}</td>
         <td class="right">{{ ph or 0 }}</td>
         <td class="right">{{ cl or 0 }}</td>
@@ -79,7 +93,7 @@
         <td class="right">{{ r6 or 0 }}</td>
         <td class="right">{{ oi or 0 }}</td>
         <td class="right">{{ tc or 0 }}</td>
-        <td>
+        <td data-col="note">
           {% if no_record %}
             <span class="badge badge-amber">未建檔</span>
           {% endif %}
@@ -92,8 +106,11 @@
       {% endfor %}
 
       {% if not items %}
-      <tr><td colspan="10" class="text-center">尚無資料</td></tr>
+      <tr id="noDataRow"><td colspan="10" class="text-center">尚無資料</td></tr>
       {% endif %}
+
+      <!-- 搜尋無結果時顯示（預設隱藏） -->
+      <tr id="noMatchRow" style="display:none;"><td colspan="10" class="text-center">沒有符合搜尋結果</td></tr>
     </tbody>
 
     {% if items %}
@@ -124,7 +141,116 @@
   </table>
 
   <p class="text-gray-600 text-sm mt-2">
-    ※ 提示：如未看到切換連結，請嘗試重新整理（Windows：Ctrl+F5，Mac：Shift+Reload）或直接開啟 <code>/insurance?all=1</code>。
+    ※ 提示：如未看到切換連結，請重新整理（Windows：Ctrl+F5，Mac：Shift+Reload），或直接開 <code>/insurance?all=1</code>。
   </p>
+
+  <script>
+    (function() {
+      const $ = (sel) => document.querySelector(sel);
+      const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+      const input = $('#searchInput');
+      const clearBtn = $('#clearBtn');
+      const exportBtn = $('#exportBtn');
+      const tbody = $('#tbodyData');
+      const rows = () => $$('#tbodyData > tr').filter(r => r.id !== 'noDataRow' && r.id !== 'noMatchRow');
+      const noDataRow = $('#noDataRow');
+      const noMatchRow = $('#noMatchRow');
+      const rowCountEl = $('#rowCount');
+
+      function normalize(s) {
+        return (s || '').toString().trim().toLowerCase();
+      }
+
+      function visibleRowsCount() {
+        return rows().filter(r => r.style.display !== 'none').length;
+      }
+
+      function updateCount() {
+        if (rowCountEl) rowCountEl.textContent = visibleRowsCount();
+      }
+
+      function applyFilter() {
+        const q = normalize(input.value);
+        let anyVisible = false;
+
+        rows().forEach(tr => {
+          const name = normalize(tr.querySelector('[data-col="name"]')?.textContent);
+          const note = normalize(tr.querySelector('[data-col="note"]')?.textContent);
+          const match = !q || name.includes(q) || note.includes(q);
+          tr.style.display = match ? '' : 'none';
+          if (match) anyVisible = true;
+        });
+
+        if (noDataRow) {
+          // 如果原本就沒有資料，維持顯示
+          const hasServerData = rows().length > 0;
+          noDataRow.style.display = hasServerData ? 'none' : '';
+        }
+        if (noMatchRow) {
+          const hasServerData = rows().length > 0;
+          noMatchRow.style.display = (hasServerData && !anyVisible) ? '' : 'none';
+        }
+        updateCount();
+      }
+
+      function clearFilter() {
+        input.value = '';
+        applyFilter();
+        input.focus();
+      }
+
+      function csvEscape(field) {
+        const text = (field ?? '').toString();
+        const escaped = text.replace(/"/g, '""');
+        return `"${escaped}"`;
+      }
+
+      function exportCsv() {
+        const table = $('#insTable');
+        if (!table) return;
+
+        const headerCols = ['姓名','個人勞保','個人健保','公司勞保','公司健保','退休金 (6%)','職保','公司負擔總額','備註 / 狀態'];
+        const dataRows = [];
+
+        rows().forEach(tr => {
+          if (tr.style.display === 'none') return; // 只匯出目前顯示的列
+          const tds = Array.from(tr.querySelectorAll('td'));
+          // 取前 9 欄（不含操作）
+          const cells = tds.slice(0, 9).map(td => td.innerText.trim());
+          dataRows.push(cells);
+        });
+
+        const lines = [];
+        lines.push(headerCols.map(csvEscape).join(','));
+        dataRows.forEach(r => lines.push(r.map(csvEscape).join(',')));
+
+        // 加上 UTF-8 BOM，Excel 直接開不亂碼
+        const csvContent = '\uFEFF' + lines.join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+
+        const a = document.createElement('a');
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        a.download = `保險負擔總覽_${y}${m}${d}.csv`;
+        a.href = URL.createObjectURL(blob);
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          URL.revokeObjectURL(a.href);
+          a.remove();
+        }, 0);
+      }
+
+      input?.addEventListener('input', applyFilter);
+      clearBtn?.addEventListener('click', clearFilter);
+      exportBtn?.addEventListener('click', exportCsv);
+
+      // 初次進入頁面（若有查詢字串也會即時過濾）
+      applyFilter();
+    })();
+  </script>
 </body>
 </html>
