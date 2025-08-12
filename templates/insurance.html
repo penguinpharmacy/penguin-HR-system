@@ -7,10 +7,26 @@
 </head>
 <body class="p-4">
   <h1 class="text-2xl mb-4">保險負擔總覽</h1>
-  <a href="{{ url_for('index') }}" class="text-purple-600">← 返回特休總覽</a>
-  <a href="{{ url_for('add_employee') }}" class="ml-4 text-purple-600">新增員工</a>
 
-  <table class="min-w-full border mt-4">
+  <div class="mb-3 flex items-center gap-4">
+    <a href="{{ url_for('index') }}" class="text-purple-600">← 返回特休總覽</a>
+    <a href="{{ url_for('add_employee') }}" class="text-purple-600">新增員工</a>
+
+    <!-- 顯示篩選切換 -->
+    <span class="ml-2 text-gray-600 text-sm">
+      目前顯示：
+      {% if show_all %}
+        <strong>全部（含離職／停用）</strong> ・
+        <a href="{{ url_for('list_insurance') }}" class="text-blue-600">只看在職</a>
+      {% else %}
+        <strong>在職員工</strong> ・
+        <a href="{{ url_for('list_insurance', all='1') }}" class="text-blue-600">顯示全部（含離職／停用）</a>
+      {% endif %}
+      （共 {{ items|length }} 筆）
+    </span>
+  </div>
+
+  <table class="min-w-full border mt-2">
     <thead>
       <tr>
         <th>姓名</th>
@@ -29,26 +45,58 @@
       {% for emp_id, name, pl, ph, cl, ch, r6, oi, tc, note in items %}
       <tr class="border-t">
         <td>{{ name }}</td>
-        <td>{{ pl }}</td>
-        <td>{{ ph }}</td>
-        <td>{{ cl }}</td>
-        <td>{{ ch }}</td>
-        <td>{{ r6 }}</td>
-        <td>{{ oi }}</td>
-        <td>{{ tc }}</td>
+        <td>{{ pl or 0 }}</td>
+        <td>{{ ph or 0 }}</td>
+        <td>{{ cl or 0 }}</td>
+        <td>{{ ch or 0 }}</td>
+        <td>{{ r6 or 0 }}</td>
+        <td>{{ oi or 0 }}</td>
+        <td>{{ tc or 0 }}</td>
         <td>{{ note }}</td>
         <td>
-          <a href="{{ url_for('edit_insurance', emp_id=emp_id) }}"
-             class="text-blue-600">編輯</a>
+          <a href="{{ url_for('edit_insurance', emp_id=emp_id) }}" class="text-blue-600">編輯</a>
         </td>
       </tr>
       {% endfor %}
+
       {% if not items %}
       <tr><td colspan="10" class="text-center py-4">尚無資料</td></tr>
       {% endif %}
     </tbody>
+
+    <!-- 總計列（僅前端累加顯示） -->
+    {% if items %}
+    {% set t = namespace(pl=0, ph=0, cl=0, ch=0, r6=0, oi=0, tc=0) %}
+    {% for emp_id, name, pl, ph, cl, ch, r6, oi, tc, note in items %}
+      {% set t.pl = t.pl + (pl or 0) %}
+      {% set t.ph = t.ph + (ph or 0) %}
+      {% set t.cl = t.cl + (cl or 0) %}
+      {% set t.ch = t.ch + (ch or 0) %}
+      {% set t.r6 = t.r6 + (r6 or 0) %}
+      {% set t.oi = t.oi + (oi or 0) %}
+      {% set t.tc = t.tc + (tc or 0) %}
+    {% endfor %}
+    <tfoot>
+      <tr class="border-t bg-gray-50">
+        <td><strong>總計</strong></td>
+        <td><strong>{{ t.pl }}</strong></td>
+        <td><strong>{{ t.ph }}</strong></td>
+        <td><strong>{{ t.cl }}</strong></td>
+        <td><strong>{{ t.ch }}</strong></td>
+        <td><strong>{{ t.r6 }}</strong></td>
+        <td><strong>{{ t.oi }}</strong></td>
+        <td><strong>{{ t.tc }}</strong></td>
+        <td colspan="2"></td>
+      </tr>
+    </tfoot>
+    {% endif %}
   </table>
+
+  <p class="text-gray-600 text-sm mt-2">
+    ※ 預設僅顯示「在職員工」。若需包含離職或停用，請點選「顯示全部」切換。
+  </p>
 </body>
 </html>
+
 
 
