@@ -27,9 +27,15 @@
       </label>
     </div>
     <div>
-      <label>天數：
-        <input type="number" name="days" value="{{ days }}" min="1" required class="border px-2 py-1 w-24">
+      <label>時數（小時，最小 0.5）：
+        <input type="number"
+               name="hours"
+               step="0.5"
+               min="0.5"
+               value="{{ hours if hours is defined else ((days or 0) * 8) }}"
+               required class="border px-2 py-1 w-32">
       </label>
+      <div class="text-sm text-gray-600 mt-1">（原本的「天數」已改為「小時」，例如 1 天 = 8 小時）</div>
     </div>
     <div>
       <label>備註：
@@ -44,5 +50,3 @@
   </form>
 </body>
 </html>
-
-
