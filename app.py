@@ -1,5 +1,11 @@
 from flask import Flask, render_template, request, redirect, url_for, abort
-from models import calculate_seniority, entitled_leave_days, entitled_sick_days, entitled_personal_days, entitled_marriage_days
+from models import (
+    calculate_seniority,
+    entitled_leave_days,
+    entitled_sick_days,
+    entitled_personal_days,
+    entitled_marriage_days,
+)
 from datetime import datetime, date
 from decimal import Decimal, InvalidOperation
 import os
@@ -25,31 +31,46 @@ def get_conn():
     dbname = result.path.lstrip('/')
     ipv4 = socket.getaddrinfo(host, port, socket.AF_INET)[0][4][0]
     return psycopg.connect(
-        host=ipv4, port=port, user=user, password=password, dbname=dbname, sslmode='require'
+        host=ipv4,
+        port=port,
+        user=user,
+        password=password,
+        dbname=dbname,
+        sslmode='require'
     )
 
 # -------------------------
-# 工具
+# 小工具
 # -------------------------
 def is_active_by_end_date(ed: date | None) -> bool:
     return (ed is None) or (ed >= date.today())
 
-def _parse_half_hour(value_str: str) -> Decimal:
-    if value_str is None or str(value_str).strip() == '':
-        raise ValueError("請輸入時數")
+def _is_employee_active(conn, emp_id: int) -> bool:
+    with conn.cursor() as c:
+        c.execute("""
+          SELECT (end_date IS NULL OR end_date >= CURRENT_DATE) AND COALESCE(is_active, TRUE)
+          FROM employees WHERE id=%s
+        """, (emp_id,))
+        r = c.fetchone()
+        return bool(r and r[0])
+
+def _parse_half_hour(value_str) -> Decimal:
+    """驗證小時數為 0.5 的倍數且 > 0"""
     try:
         h = Decimal(str(value_str))
     except (InvalidOperation, TypeError):
         raise ValueError("請輸入數字")
-    # 0.5 小時為單位
-    if (h * 2) % 1 != 0:
-        raise ValueError("請以 0.5 小時為單位")
     if h <= 0:
         raise ValueError("時數需大於 0")
+    if (h * 2) % 1 != 0:
+        raise ValueError("請以 0.5 小時為單位")
     return h
 
 def _form_used_leave_hours() -> Decimal:
-    """相容：優先讀 used_leave_hours（小時），沒有就讀 used_leave（天）*8"""
+    """
+    讀「已用特休」：優先 used_leave_hours（小時），否則讀 used_leave（天）×8。
+    表單還沒改成小時也沒關係。
+    """
     val_hours = request.form.get('used_leave_hours')
     if val_hours not in (None, ''):
         try:
@@ -66,8 +87,27 @@ def _form_used_leave_hours() -> Decimal:
         return d * 8 if d >= 0 else Decimal('0')
     return Decimal('0')
 
+def _form_hours_or_days(hours_name='hours', days_name='days') -> Decimal:
+    """
+    讀請假表單：優先讀 hours（小時，0.5 單位），否則讀 days（天）×8。
+    """
+    val_h = request.form.get(hours_name)
+    if val_h not in (None, ''):
+        return _parse_half_hour(val_h)
+    val_d = request.form.get(days_name)
+    if val_d not in (None, ''):
+        # 舊表單：天數（整天）→ 轉成小時
+        try:
+            d = Decimal(str(val_d))
+        except InvalidOperation:
+            d = Decimal('0')
+        if d <= 0:
+            raise ValueError("天數需大於 0")
+        return d * 8
+    raise ValueError("請輸入請假時數")
+
 # -------------------------
-# 資料表初始化/升級（自動跑，不用進 DB 工具）
+# 資料表初始化/升級（自動跑）
 # -------------------------
 def init_db():
     with get_conn() as conn, conn.cursor() as c:
@@ -75,27 +115,18 @@ def init_db():
         c.execute('''
             CREATE TABLE IF NOT EXISTS employees (
               id SERIAL PRIMARY KEY,
-              name TEXT,
-              start_date DATE,
-              end_date DATE,
-              department TEXT,
-              job_level TEXT,
-              salary_grade TEXT,
-              base_salary INTEGER,
-              position_allowance INTEGER,
+              name TEXT, start_date DATE, end_date DATE,
+              department TEXT, job_level TEXT, salary_grade TEXT,
+              base_salary INTEGER, position_allowance INTEGER,
               on_leave_suspend BOOLEAN,
-              used_leave INTEGER,
-              entitled_leave INTEGER,
-              entitled_sick INTEGER,
-              used_sick INTEGER,
-              entitled_personal INTEGER,
-              used_personal INTEGER,
-              entitled_marriage INTEGER,
-              used_marriage INTEGER,
+              used_leave INTEGER,            -- 舊：天
+              entitled_leave INTEGER,        -- 舊：天
+              entitled_sick INTEGER, used_sick INTEGER,
+              entitled_personal INTEGER, used_personal INTEGER,
+              entitled_marriage INTEGER, used_marriage INTEGER,
               is_active BOOLEAN DEFAULT TRUE,
-              -- 小時制欄位
-              entitled_leave_hours NUMERIC(8,1),
-              used_leave_hours NUMERIC(8,1)
+              entitled_leave_hours NUMERIC(8,1),  -- 新：小時
+              used_leave_hours NUMERIC(8,1)       -- 新：小時
             );
         ''')
         conn.commit()
@@ -136,7 +167,7 @@ def init_db():
         c.execute("ALTER SEQUENCE insurances_id_seq OWNED BY insurances.id;")
         conn.commit()
 
-        # leave_records（加入 hours 欄位）
+        # leave_records（加入 hours）
         c.execute('''
             CREATE TABLE IF NOT EXISTS leave_records (
               id           SERIAL PRIMARY KEY,
@@ -150,10 +181,11 @@ def init_db():
               created_at   TIMESTAMP DEFAULT NOW()
             );
         ''')
+        # 確保 hours 欄位存在（若舊表沒有）
         c.execute("ALTER TABLE leave_records ADD COLUMN IF NOT EXISTS hours NUMERIC(8,1);")
         conn.commit()
 
-        # 回填：若小時欄位為 NULL，用天數*8 補上
+        # 回填：員工小時欄位用天數*8 補上；歷史紀錄 hours 用 days*8 補上
         c.execute("""
           UPDATE employees
              SET entitled_leave_hours = COALESCE(entitled_leave_hours, COALESCE(entitled_leave,0) * 8.0),
@@ -166,7 +198,7 @@ def init_db():
         conn.commit()
 
 # -------------------------
-# 首頁：員工特休總覽（小時制）
+# 首頁：員工特休總覽（特休用小時呈現）
 # -------------------------
 @app.route('/')
 def index():
@@ -215,10 +247,11 @@ def index():
          sick_ent, sick_used, per_ent, per_used, mar_ent, mar_used,
          is_active) in rows:
 
-        # 小時欄位為主；沒有就用天數*8 回退
+        # 特休改用「小時」（若為空則用天數*8 回退）
         ent_h = float(ent_hours) if ent_hours is not None else float((ent_days or 0) * 8)
         used_h = float(used_hours) if used_hours is not None else float((used_days or 0) * 8)
 
+        # 年資（沿用你的算法）
         ref_date = ed or sd
         if isinstance(ref_date, str):
             ref_date = datetime.strptime(ref_date, '%Y-%m-%d').date()
@@ -236,7 +269,7 @@ def index():
             'position_allowance': allowance,
             'years': years,
             'months': months,
-            # 這三個欄位沿用舊名字，但數值已是「小時」
+            # <<< 這三個欄位現在是「小時」 >>>
             'entitled': ent_h,
             'used': used_h,
             'remaining': max(ent_h - used_h, 0.0),
@@ -256,7 +289,7 @@ def index():
     return render_template('index.html', employees=employees, show_all=show_all)
 
 # -------------------------
-# 新增員工（已用特休以「小時」儲存）
+# 新增員工（已用特休以「小時」儲存，表單可填天或小時）
 # -------------------------
 @app.route('/add', methods=['GET','POST'])
 def add_employee():
@@ -276,9 +309,9 @@ def add_employee():
         ed_date = datetime.strptime(end_date_s, '%Y-%m-%d').date() if end_date_s else None
         years, months = calculate_seniority(sd_date)
 
-        entitled_days = entitled_leave_days(years, months, suspend)
+        entitled_days  = entitled_leave_days(years, months, suspend)
         entitled_hours = Decimal(str(entitled_days)) * 8
-        used_hours = _form_used_leave_hours()
+        used_hours     = _form_used_leave_hours()
 
         sick_ent = entitled_sick_days(years, months)
         per_ent  = entitled_personal_days(years, months)
@@ -315,8 +348,8 @@ def add_employee():
                 dept, level, grade,
                 base, allowance,
                 suspend,
-                int(used_hours / 8), int(entitled_days),        # 仍保留天數欄位（相容）
-                str(entitled_hours), str(used_hours),           # 小時欄位（主用）
+                int(used_hours / 8), int(entitled_days),       # 天（保留相容用）
+                str(entitled_hours), str(used_hours),          # 小時（主用）
                 sick_ent,
                 per_ent,
                 mar_ent,
@@ -327,7 +360,7 @@ def add_employee():
     return render_template('add_employee.html')
 
 # -------------------------
-# 編輯員工（已用特休以「小時」儲存）
+# 編輯員工（已用特休以「小時」儲存，表單可填天或小時）
 # -------------------------
 @app.route('/edit/<int:emp_id>', methods=['GET','POST'])
 def edit_employee(emp_id):
@@ -347,9 +380,9 @@ def edit_employee(emp_id):
         ed_date = datetime.strptime(end_date_s, '%Y-%m-%d').date() if end_date_s else None
         years, months = calculate_seniority(sd_date)
 
-        entitled_days = entitled_leave_days(years, months, suspend)
+        entitled_days  = entitled_leave_days(years, months, suspend)
         entitled_hours = Decimal(str(entitled_days)) * 8
-        used_hours = _form_used_leave_hours()
+        used_hours     = _form_used_leave_hours()
 
         sick_ent = entitled_sick_days(years, months)
         per_ent  = entitled_personal_days(years, months)
@@ -382,8 +415,8 @@ def edit_employee(emp_id):
                 dept, level, grade,
                 base, allowance,
                 suspend,
-                int(used_hours / 8), int(entitled_days),     # 天數欄位（相容）
-                str(entitled_hours), str(used_hours),        # 小時欄位（主用）
+                int(used_hours / 8), int(entitled_days),  # 天（保留）
+                str(entitled_hours), str(used_hours),     # 小時（主用）
                 sick_ent, 0,
                 per_ent,  0,
                 mar_ent,  0,
@@ -439,15 +472,6 @@ def list_insurance():
         rows = c.fetchall()
 
     return render_template('insurance.html', items=rows, show_all=show_all)
-
-def _is_employee_active(conn, emp_id: int) -> bool:
-    with conn.cursor() as c:
-        c.execute("""
-          SELECT (end_date IS NULL OR end_date >= CURRENT_DATE) AND COALESCE(is_active, TRUE)
-          FROM employees WHERE id = %s
-        """, (emp_id,))
-        r = c.fetchone()
-        return bool(r and r[0])
 
 # -------------------------
 # 編輯保險（不允許離職/非在職）
@@ -521,7 +545,7 @@ def leave_history(emp_id, leave_type):
         c.execute('SELECT name FROM employees WHERE id=%s', (emp_id,))
         name = c.fetchone()[0]
         c.execute('''
-            SELECT id, date_from, date_to, hours, note, created_at
+            SELECT id, date_from, date_to, hours, days, note, created_at
               FROM leave_records
              WHERE employee_id=%s
                AND leave_type=%s
@@ -530,12 +554,13 @@ def leave_history(emp_id, leave_type):
         rows = c.fetchall()
 
     records = []
-    for rid, df, dt, hours, note, created in rows:
+    for rid, df, dt, hours, days, note, created in rows:
         records.append(SimpleNamespace(
             id=rid,
             start_date = df.strftime('%Y-%m-%d'),
             end_date   = dt.strftime('%Y-%m-%d'),
-            hours      = float(hours or 0),
+            hours      = float(hours or 0),   # 新：小時
+            days       = int(days or 0),      # 舊：天（相容模板用）
             note       = note or '',
             created_at = created.strftime('%Y-%m-%d %H:%M')
         ))
@@ -553,19 +578,21 @@ def add_leave_record(emp_id, leave_type):
         df   = request.form['start_date']
         dt   = request.form['end_date']
         note = request.form.get('note','')
-        hours = _parse_half_hour(request.form['hours'])
+        hours = _form_hours_or_days('hours', 'days')  # 可接收 hours 或 days
+        # days 欄位只保留相容（整數即可）
+        days_int = int(hours // 8)
+
         with get_conn() as conn, conn.cursor() as c:
             c.execute('''
                 INSERT INTO leave_records
-                  (employee_id, leave_type, date_from, date_to, hours, note)
-                VALUES (%s,%s,%s,%s,%s,%s)
-            ''', (emp_id, leave_type, df, dt, str(hours), note))
+                  (employee_id, leave_type, date_from, date_to, hours, days, note)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+            ''', (emp_id, leave_type, df, dt, str(hours), days_int, note))
             conn.commit()
         return redirect(url_for('leave_history', emp_id=emp_id, leave_type=leave_type))
 
-    return render_template('add_leave.html',
-                           emp_id=emp_id,
-                           leave_type=leave_type)
+    # 你若有獨立的 add_leave.html 就會用到 GET；目前大多直接在 history.html 新增，這裡不會被走到
+    return render_template('add_leave.html', emp_id=emp_id, leave_type=leave_type)
 
 @app.route('/history/<int:emp_id>/<leave_type>/edit/<int:record_id>', methods=['GET','POST'])
 def edit_leave_record(emp_id, leave_type, record_id):
@@ -574,26 +601,30 @@ def edit_leave_record(emp_id, leave_type, record_id):
         df   = request.form['start_date']
         dt   = request.form['end_date']
         note = request.form.get('note','')
-        hours = _parse_half_hour(request.form['hours'])
+        hours = _form_hours_or_days('hours', 'days')  # 可接收 hours 或 days
+        days_int = int(hours // 8)
+
         with get_conn() as conn, conn.cursor() as c:
             c.execute('''
                 UPDATE leave_records
                    SET date_from = %s,
                        date_to   = %s,
                        hours     = %s,
+                       days      = %s,
                        note      = %s
                  WHERE id = %s
-            ''', (df, dt, str(hours), note, record_id))
+            ''', (df, dt, str(hours), days_int, note, record_id))
             conn.commit()
         return redirect(url_for('leave_history', emp_id=emp_id, leave_type=leave_type))
 
+    # GET：讀一筆紀錄填到表單（同時提供 hours & days，兩種模板都相容）
     with get_conn() as conn, conn.cursor() as c:
         c.execute('''
-            SELECT date_from, date_to, hours, note
+            SELECT date_from, date_to, hours, days, note
               FROM leave_records
              WHERE id=%s
         ''', (record_id,))
-        df, dt, hours, note = c.fetchone()
+        df, dt, hours, days, note = c.fetchone()
 
     return render_template('edit_leave.html',
                            emp_id=emp_id,
@@ -602,6 +633,7 @@ def edit_leave_record(emp_id, leave_type, record_id):
                            start_date=df.strftime('%Y-%m-%d'),
                            end_date  =dt.strftime('%Y-%m-%d'),
                            hours     =float(hours or 0),
+                           days      =int(days or 0),
                            note      =note or '')
 
 # -------------------------
@@ -629,14 +661,51 @@ def salary_detail(emp_id):
         (pl, ph, cl, ch, ret6, oi, total, note) = ins
 
     return render_template('salary_detail.html',
-                           emp_id=emp_id, name=name, grade=grade,
-                           personal_labour=pl, personal_health=ph,
-                           company_labour=cl, company_health=ch,
-                           retirement6=ret6, occupational_ins=oi,
-                           total_company=total, note=note)
+                           emp_id=emp_id,
+                           name=name,
+                           grade=grade,
+                           personal_labour=pl,
+                           personal_health=ph,
+                           company_labour=cl,
+                           company_health=ch,
+                           retirement6=ret6,
+                           occupational_ins=oi,
+                           total_company=total,
+                           note=note)
 
+# -------------------------
+# 軟刪除/還原（維持不變）
+# -------------------------
+@app.route('/delete/<int:emp_id>')
+def delete_employee(emp_id):
+    init_db()
+    today = date.today()
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute('''
+            UPDATE employees
+               SET is_active = FALSE,
+                   end_date  = %s
+             WHERE id = %s
+        ''', (today, emp_id))
+        conn.commit()
+    return redirect(url_for('index'))
+
+@app.route('/restore/<int:emp_id>')
+def restore_employee(emp_id):
+    init_db()
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute('''
+            UPDATE employees
+               SET is_active = TRUE,
+                   end_date   = NULL
+             WHERE id = %s
+        ''', (emp_id,))
+        conn.commit()
+    return redirect(url_for('index', all='1'))
+
+# -------------------------
+# 啟動
+# -------------------------
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-
-
