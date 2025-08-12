@@ -4,25 +4,50 @@
   <meta charset="utf-8">
   <title>保險負擔總覽</title>
   <link href="/static/style.css" rel="stylesheet">
+  <style>
+    /* 若你沒有 Tailwind，提供一些基本樣式備援 */
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", "Helvetica Neue", Arial, "PingFang TC", "Microsoft JhengHei", sans-serif; }
+    .p-4 { padding: 1rem; }
+    .mb-4 { margin-bottom: 1rem; }
+    .mb-3 { margin-bottom: .75rem; }
+    .mt-2 { margin-top: .5rem; }
+    .text-2xl { font-size: 1.5rem; font-weight: 700; }
+    .text-sm { font-size: .875rem; }
+    .text-center { text-align: center; }
+    .text-gray-600 { color: #4b5563; }
+    .text-blue-600 { color: #2563eb; }
+    .text-purple-600 { color: #7c3aed; }
+    .underline { text-decoration: underline; }
+    .min-w-full { min-width: 100%; }
+    .border { border: 1px solid #e5e7eb; border-collapse: collapse; }
+    table th, table td { padding: .5rem .75rem; border: 1px solid #e5e7eb; }
+    thead th { background: #f9fafb; text-align: left; white-space: nowrap; }
+    tbody tr:nth-child(odd) { background: #fafafa; }
+    .badge { display: inline-block; padding: .125rem .5rem; border-radius: .25rem; font-size: .75rem; line-height: 1; }
+    .badge-gray { background: #e5e7eb; color: #374151; }
+    .badge-amber { background: #fde68a; color: #92400e; }
+    .right { text-align: right; }
+    .flex { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+  </style>
 </head>
 <body class="p-4">
   <h1 class="text-2xl mb-4">保險負擔總覽</h1>
 
-  <div class="mb-3 flex items-center gap-4">
+  <!-- 導覽與篩選切換（容錯：即使後端沒傳 show_all 也能運作） -->
+  <div class="mb-3 flex">
     <a href="{{ url_for('index') }}" class="text-purple-600">← 返回特休總覽</a>
     <a href="{{ url_for('add_employee') }}" class="text-purple-600">新增員工</a>
 
-    <!-- 顯示篩選切換 -->
-    <span class="ml-2 text-gray-600 text-sm">
+    {% set _show_all = (show_all if show_all is defined else (request.args.get('all') == '1')) %}
+    <span class="text-gray-600 text-sm">
       目前顯示：
-      {% if show_all %}
+      {% if _show_all %}
         <strong>全部（含離職／停用）</strong> ・
-        <a href="{{ url_for('list_insurance') }}" class="text-blue-600">只看在職</a>
+        <a href="{{ url_for('list_insurance') }}" class="text-blue-600 underline">只看在職</a>
       {% else %}
         <strong>在職員工</strong> ・
-        <a href="{{ url_for('list_insurance', all='1') }}" class="text-blue-600">顯示全部（含離職／停用）</a>
+        <a href="{{ url_for('list_insurance', all='1') }}" class="text-blue-600 underline">顯示全部（含離職／停用）</a>
       {% endif %}
-      （共 {{ items|length }} 筆）
     </span>
   </div>
 
@@ -30,29 +55,36 @@
     <thead>
       <tr>
         <th>姓名</th>
-        <th>個人勞保</th>
-        <th>個人健保</th>
-        <th>公司勞保</th>
-        <th>公司健保</th>
-        <th>退休金 (6%)</th>
-        <th>職保</th>
-        <th>公司負擔總額</th>
-        <th>備註</th>
+        <th class="right">個人勞保</th>
+        <th class="right">個人健保</th>
+        <th class="right">公司勞保</th>
+        <th class="right">公司健保</th>
+        <th class="right">退休金 (6%)</th>
+        <th class="right">職保</th>
+        <th class="right">公司負擔總額</th>
+        <th>備註 / 狀態</th>
         <th>操作</th>
       </tr>
     </thead>
+
     <tbody>
       {% for emp_id, name, pl, ph, cl, ch, r6, oi, tc, note in items %}
-      <tr class="border-t">
+      {% set no_record = (pl is none and ph is none and cl is none and ch is none and r6 is none and oi is none and tc is none) %}
+      <tr>
         <td>{{ name }}</td>
-        <td>{{ pl or 0 }}</td>
-        <td>{{ ph or 0 }}</td>
-        <td>{{ cl or 0 }}</td>
-        <td>{{ ch or 0 }}</td>
-        <td>{{ r6 or 0 }}</td>
-        <td>{{ oi or 0 }}</td>
-        <td>{{ tc or 0 }}</td>
-        <td>{{ note }}</td>
+        <td class="right">{{ pl or 0 }}</td>
+        <td class="right">{{ ph or 0 }}</td>
+        <td class="right">{{ cl or 0 }}</td>
+        <td class="right">{{ ch or 0 }}</td>
+        <td class="right">{{ r6 or 0 }}</td>
+        <td class="right">{{ oi or 0 }}</td>
+        <td class="right">{{ tc or 0 }}</td>
+        <td>
+          {% if no_record %}
+            <span class="badge badge-amber">未建檔</span>
+          {% endif %}
+          {% if note %}<span class="badge badge-gray">{{ note }}</span>{% endif %}
+        </td>
         <td>
           <a href="{{ url_for('edit_insurance', emp_id=emp_id) }}" class="text-blue-600">編輯</a>
         </td>
@@ -60,11 +92,10 @@
       {% endfor %}
 
       {% if not items %}
-      <tr><td colspan="10" class="text-center py-4">尚無資料</td></tr>
+      <tr><td colspan="10" class="text-center">尚無資料</td></tr>
       {% endif %}
     </tbody>
 
-    <!-- 總計列（僅前端累加顯示） -->
     {% if items %}
     {% set t = namespace(pl=0, ph=0, cl=0, ch=0, r6=0, oi=0, tc=0) %}
     {% for emp_id, name, pl, ph, cl, ch, r6, oi, tc, note in items %}
@@ -77,15 +108,15 @@
       {% set t.tc = t.tc + (tc or 0) %}
     {% endfor %}
     <tfoot>
-      <tr class="border-t bg-gray-50">
+      <tr>
         <td><strong>總計</strong></td>
-        <td><strong>{{ t.pl }}</strong></td>
-        <td><strong>{{ t.ph }}</strong></td>
-        <td><strong>{{ t.cl }}</strong></td>
-        <td><strong>{{ t.ch }}</strong></td>
-        <td><strong>{{ t.r6 }}</strong></td>
-        <td><strong>{{ t.oi }}</strong></td>
-        <td><strong>{{ t.tc }}</strong></td>
+        <td class="right"><strong>{{ t.pl }}</strong></td>
+        <td class="right"><strong>{{ t.ph }}</strong></td>
+        <td class="right"><strong>{{ t.cl }}</strong></td>
+        <td class="right"><strong>{{ t.ch }}</strong></td>
+        <td class="right"><strong>{{ t.r6 }}</strong></td>
+        <td class="right"><strong>{{ t.oi }}</strong></td>
+        <td class="right"><strong>{{ t.tc }}</strong></td>
         <td colspan="2"></td>
       </tr>
     </tfoot>
@@ -93,10 +124,7 @@
   </table>
 
   <p class="text-gray-600 text-sm mt-2">
-    ※ 預設僅顯示「在職員工」。若需包含離職或停用，請點選「顯示全部」切換。
+    ※ 提示：如未看到切換連結，請嘗試重新整理（Windows：Ctrl+F5，Mac：Shift+Reload）或直接開啟 <code>/insurance?all=1</code>。
   </p>
 </body>
 </html>
-
-
-
