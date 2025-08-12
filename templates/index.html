@@ -4,20 +4,65 @@
   <meta charset="utf-8">
   <title>員工特休總覽</title>
   <link href="/static/style.css" rel="stylesheet">
+  <style>
+    /* 備援樣式（無 Tailwind 也好看） */
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", "Helvetica Neue", Arial, "PingFang TC", "Microsoft JhengHei", sans-serif; }
+    .p-4 { padding: 1rem; }
+    .mb-4 { margin-bottom: 1rem; }
+    .mb-3 { margin-bottom: .75rem; }
+    .mt-2 { margin-top: .5rem; }
+    .text-2xl { font-size: 1.5rem; font-weight: 700; }
+    .text-sm { font-size: .875rem; }
+    .text-gray-600 { color:#4b5563; }
+    .text-blue-600 { color:#2563eb; }
+    .text-green-600 { color:#16a34a; }
+    .text-purple-600 { color:#7c3aed; }
+    .underline { text-decoration: underline; }
+    .min-w-full { min-width: 100%; }
+    .border { border: 1px solid #e5e7eb; border-collapse: collapse; width: 100%; }
+    table th, table td { padding: .5rem .75rem; border: 1px solid #e5e7eb; vertical-align: top; }
+    thead th { background: #f9fafb; text-align: left; white-space: nowrap; }
+    tbody tr:nth-child(odd) { background: #fafafa; }
+    .nowrap { white-space: nowrap; }
+    .right { text-align: right; }
+    .toolbar { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+    .input { border:1px solid #d1d5db; border-radius:.375rem; padding:.375rem .5rem; min-width:260px; }
+    .btn { border:1px solid #d1d5db; background:#fff; border-radius:.375rem; padding:.375rem .65rem; cursor:pointer; }
+    .btn:hover { background:#f9fafb; }
+    .btn-primary { border-color:#2563eb; color:#2563eb; }
+    .btn-primary:hover { background:#eff6ff; }
+  </style>
 </head>
 <body class="p-4">
   <h1 class="text-2xl mb-4">員工特休總覽</h1>
-  <div class="mb-4">
-    <a href="/?all={{ '0' if show_all else '1' }}" class="text-blue-600">
+
+  <!-- 上方導覽／切換 -->
+  <div class="mb-3" style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
+    <a href="/?all={{ '0' if show_all else '1' }}" class="text-blue-600 underline">
       {{ '顯示在職員工' if show_all else '顯示所有員工（含離職）' }}
     </a>
-    <a href="{{ url_for('list_insurance') }}" class="ml-4 text-green-600">
-       保險負擔
-    </a>
-    <a href="/add" class="ml-4 text-purple-600">新增員工</a>
+    <a href="{{ url_for('list_insurance') }}" class="text-green-600 underline">保險負擔</a>
+    <a href="{{ url_for('add_employee') }}" class="text-purple-600 underline">新增員工</a>
+
+    <span class="text-gray-600 text-sm">
+      目前顯示：
+      {% if show_all %}
+        <strong>全部（含離職／停用）</strong>
+      {% else %}
+        <strong>在職員工</strong>
+      {% endif %}
+      ・共 <span id="rowCount">{{ employees|length }}</span> 人
+    </span>
   </div>
 
-  <table class="min-w-full border">
+  <!-- 工具列：搜尋 + 匯出 CSV（只匯出目前畫面顯示的列） -->
+  <div class="toolbar mb-3">
+    <input id="searchInput" class="input" type="search" placeholder="搜尋 姓名／部門／職等…">
+    <button class="btn" id="clearBtn" type="button">清除搜尋</button>
+    <button class="btn btn-primary" id="exportBtn" type="button">匯出目前列表為 CSV</button>
+  </div>
+
+  <table id="empTable" class="min-w-full border">
     <thead>
       <tr>
         <th>姓名</th>
@@ -39,67 +84,168 @@
         <th>操作</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="tbodyData">
       {% for e in employees %}
-      <tr class="border-t">
-        <td>{{ e.name }}</td>
-        <td>{{ e.department }}</td>
+      <tr>
+        <td data-col="name">{{ e.name }}</td>
+        <td data-col="dept">{{ e.department }}</td>
         <td>{{ e.start_date }}</td>
         <td>{{ e.end_date }}</td>
         <td>
-          <a href="{{ url_for('salary_detail', emp_id=e.id) }}"
-             class="text-blue-600">
+          <a href="{{ url_for('salary_detail', emp_id=e.id) }}" class="text-blue-600">
             {{ e.salary_grade }}
           </a>
         </td>
-        <td>{{ e.job_level }}</td>
-        <td>{{ e.base_salary }}</td>
-        <td>{{ e.position_allowance }}</td>
-        <td>{{ e.years }} 年 {{ e.months }} 月</td>
-        <td>{{ e.entitled }}</td>
-        <td>
+        <td data-col="level">{{ e.job_level }}</td>
+        <td class="right">{{ e.base_salary }}</td>
+        <td class="right">{{ e.position_allowance }}</td>
+        <td class="nowrap">{{ e.years }} 年 {{ e.months }} 月</td>
+        <td class="right">{{ e.entitled }}</td>
+        <td class="right">
           <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='特休') }}" class="text-blue-600">
             {{ e.used }}
           </a>
         </td>
-        <td>
+        <td class="right">
           <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='特休') }}" class="text-blue-600">
             {{ e.remaining }}
           </a>
         </td>
-        <td>
+        <td class="right">
           <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='病假') }}" class="text-blue-600">
             {{ e.remaining_sick }}
           </a>
         </td>
-        <td>
+        <td class="right">
           <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='事假') }}" class="text-blue-600">
             {{ e.remaining_personal }}
           </a>
         </td>
-        <td>
+        <td class="right">
           <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='婚假') }}" class="text-blue-600">
             {{ e.remaining_marriage }}
           </a>
         </td>
         <td>{{ '是' if e.suspend else '否' }}</td>
-        <td>
+        <td class="nowrap">
           {% if e.is_active %}
-          <a href="{{ url_for('edit_employee', emp_id=e.id) }}">編輯</a>
-          <a href="{{ url_for('list_insurance') }}"
-             class="ml-2 px-2 py-1 bg-green-500 text-white rounded">
-             編輯保險負擔
-          </a>
-          <a href="{{ url_for('delete_employee', emp_id=e.id) }}" class="ml-2 text-red-600" onclick="return confirm('確定要封存此員工？');">刪除</a>
+            <a href="{{ url_for('edit_employee', emp_id=e.id) }}">編輯</a>
+            <a href="{{ url_for('list_insurance') }}" class="ml-2" title="前往保險列表">編輯保險負擔</a>
+            <a href="{{ url_for('delete_employee', emp_id=e.id) }}" class="ml-2" onclick="return confirm('確定要封存此員工？');">刪除</a>
           {% else %}
-          <span class="text-gray-400">已離職</span>
-          <a href="{{ url_for('restore_employee', emp_id=e.id) }}" class="ml-2 text-green-600" onclick="return confirm('確定要復職此員工？');">復職</a>
+            <span class="text-gray-600">已離職</span>
+            <a href="{{ url_for('restore_employee', emp_id=e.id) }}" class="ml-2" onclick="return confirm('確定要復職此員工？');">復職</a>
           {% endif %}
         </td>
       </tr>
       {% endfor %}
+
+      {% if not employees %}
+      <tr id="noDataRow"><td colspan="17" class="text-center">尚無資料</td></tr>
+      {% endif %}
+      <tr id="noMatchRow" style="display:none;"><td colspan="17" class="text-center">沒有符合搜尋結果</td></tr>
     </tbody>
   </table>
+
+  <p class="text-gray-600 text-sm mt-2">
+    ※ 提示：搜尋與 CSV 匯出都只會針對「目前畫面所顯示」的資料列（在職或全部）。
+  </p>
+
+  <script>
+    (function() {
+      const $ = (sel) => document.querySelector(sel);
+      const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+      const input = $('#searchInput');
+      const clearBtn = $('#clearBtn');
+      const exportBtn = $('#exportBtn');
+      const rows = () => $$('#tbodyData > tr').filter(r => r.id !== 'noDataRow' && r.id !== 'noMatchRow');
+      const noDataRow = $('#noDataRow');
+      const noMatchRow = $('#noMatchRow');
+      const rowCountEl = $('#rowCount');
+
+      function norm(s){ return (s||'').toString().trim().toLowerCase(); }
+
+      function visibleRowsCount() {
+        return rows().filter(r => r.style.display !== 'none').length;
+      }
+
+      function updateCount() {
+        if (rowCountEl) rowCountEl.textContent = visibleRowsCount();
+      }
+
+      function applyFilter() {
+        const q = norm(input.value);
+        let anyVisible = false;
+
+        rows().forEach(tr => {
+          const name = norm(tr.querySelector('[data-col="name"]')?.textContent);
+          const dept = norm(tr.querySelector('[data-col="dept"]')?.textContent);
+          const level = norm(tr.querySelector('[data-col="level"]')?.textContent);
+          const match = !q || name.includes(q) || dept.includes(q) || level.includes(q);
+          tr.style.display = match ? '' : 'none';
+          if (match) anyVisible = true;
+        });
+
+        const hasServerData = rows().length > 0;
+        if (noDataRow) noDataRow.style.display = hasServerData ? 'none' : '';
+        if (noMatchRow) noMatchRow.style.display = (hasServerData && !anyVisible) ? '' : 'none';
+        updateCount();
+      }
+
+      function clearFilter() {
+        input.value = '';
+        applyFilter();
+        input.focus();
+      }
+
+      function csvEscape(field) {
+        const text = (field ?? '').toString();
+        const escaped = text.replace(/"/g, '""');
+        return `"${escaped}"`;
+      }
+
+      function exportCsv() {
+        const table = $('#empTable');
+        if (!table) return;
+
+        // 取表頭文字當 CSV 欄名
+        const ths = Array.from(table.querySelectorAll('thead th')).map(th => th.innerText.trim());
+        const lines = [];
+        lines.push(ths.map(csvEscape).join(','));
+
+        // 逐列寫入（只匯出目前顯示的列）
+        rows().forEach(tr => {
+          if (tr.style.display === 'none') return;
+          const tds = Array.from(tr.querySelectorAll('td'));
+          const cells = tds.map(td => td.innerText.replace(/\s+\n\s+/g, ' ').trim());
+          lines.push(cells.map(csvEscape).join(','));
+        });
+
+        // 加上 UTF-8 BOM 讓 Excel 不中亂碼
+        const csvContent = '\uFEFF' + lines.join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+
+        const a = document.createElement('a');
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        a.download = `員工特休總覽_${y}${m}${d}.csv`;
+        a.href = URL.createObjectURL(blob);
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+      }
+
+      input?.addEventListener('input', applyFilter);
+      clearBtn?.addEventListener('click', clearFilter);
+      exportBtn?.addEventListener('click', exportCsv);
+
+      // 初次載入
+      applyFilter();
+    })();
+  </script>
 </body>
 </html>
 
