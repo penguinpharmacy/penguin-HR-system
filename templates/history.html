@@ -9,6 +9,7 @@
   <h1 class="text-2xl mb-4">{{ name }} — {{ leave_type }} 紀錄</h1>
   <a href="{{ url_for('index') }}" class="text-blue-600 mb-4 inline-block">← 返回總覽</a>
 
+  <!-- 直接在同一頁新增：改為「時數（小時）」、最小 0.5 -->
   <form action="{{ url_for('add_leave_record', emp_id=emp_id, leave_type=leave_type) }}"
         method="post"
         class="mt-4 space-y-4">
@@ -23,13 +24,14 @@
       </label>
     </div>
     <div>
-      <label>天數：
-        <input type="number" name="days" min="1" required class="border px-2 py-1 w-24">
+      <label>時數（小時，最小 0.5）：
+        <input type="number" name="hours" step="0.5" min="0.5" required class="border px-2 py-1 w-28">
       </label>
+      <div class="text-sm text-gray-600 mt-1">提示：1 天 = 8 小時</div>
     </div>
     <div>
       <label>備註：
-        <input type="text" name="note" class="border px-2 py-1 w-full">
+        <input type="text" name="note" class="border px-2 py-1 w-full" placeholder="可留空">
       </label>
     </div>
     <button type="submit" class="px-4 py-2 bg-green-500 text-white rounded">
@@ -42,7 +44,7 @@
       <tr>
         <th>請假起</th>
         <th>請假迄</th>
-        <th>天數</th>
+        <th>時數（小時）</th>
         <th>備註</th>
         <th>申請時間</th>
         <th>操作</th>
@@ -53,7 +55,8 @@
       <tr class="border-t">
         <td>{{ r.start_date }}</td>
         <td>{{ r.end_date }}</td>
-        <td>{{ r.days }}</td>
+        <!-- 相容舊資料：若 r.hours 未提供，就用 r.days*8 顯示 -->
+        <td>{{ (r.hours if r.hours is defined else ((r.days or 0) * 8)) }}</td>
         <td>{{ r.note }}</td>
         <td>{{ r.created_at }}</td>
         <td>
@@ -72,5 +75,6 @@
   </table>
 </body>
 </html>
+
 
 
