@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{ leave_type }} 新增請假</title>
+  <link href="/static/style.css" rel="stylesheet">
+</head>
+<body class="p-4">
+  <h1 class="text-2xl mb-4">{{ leave_type }} 新增請假</h1>
+  <a href="{{ url_for('leave_history', emp_id=emp_id, leave_type=leave_type) }}"
+     class="text-blue-600 mb-4 inline-block">← 返回紀錄</a>
+
+  <form action="{{ url_for('add_leave_record', emp_id=emp_id, leave_type=leave_type) }}"
+        method="post" class="space-y-4">
+    <div>
+      <label>開始日期：
+        <input type="date" name="start_date" required class="border px-2 py-1">
+      </label>
+    </div>
+    <div>
+      <label>結束日期：
+        <input type="date" name="end_date" required class="border px-2 py-1">
+      </label>
+    </div>
+    <div>
+      <label>時數（小時，最小 0.5）：
+        <input type="number" name="hours" step="0.5" min="0.5" required class="border px-2 py-1 w-32">
+      </label>
+    </div>
+    <div>
+      <label>備註：
+        <input type="text" name="note" placeholder="可留空" class="border px-2 py-1 w-full">
+      </label>
+    </div>
+    <div>
+      <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded">新增</button>
+      <a href="{{ url_for('leave_history', emp_id=emp_id, leave_type=leave_type) }}"
+         class="ml-4 text-gray-600">取消</a>
+    </div>
+  </form>
+</body>
+</html>
