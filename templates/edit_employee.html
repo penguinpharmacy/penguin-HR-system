@@ -7,6 +7,10 @@
 </head>
 <body class="p-4">
   <h1 class="text-2xl mb-4">編輯員工</h1>
+
+  <!-- 說明：特休已改用「小時」，1 天 = 8 小時 -->
+  <div class="mb-4 text-sm text-gray-600">提示：特休以「小時」計算；1 天 = 8 小時；調整欄位可填正負，0.5 小時為單位。</div>
+
   <form action="/edit/{{ emp[0] }}" method="post" class="space-y-4">
     <!-- 基本資料 -->
     <div>
@@ -56,57 +60,88 @@
       </label>
     </div>
 
-    <!-- 留職停薪與特休 -->
+    <!-- 留職停薪 -->
     <div>
       <label class="inline-flex items-center">
         <input type="checkbox" name="suspend" {% if emp[9] %}checked{% endif %} class="mr-2">
         留職停薪
       </label>
     </div>
-    <div>
-      <label class="block">已用特休天數：
-        <input type="number" name="used_leave" value="{{ emp[10] }}" min="0" class="border px-2 py-1 w-24">
-      </label>
-    </div>
-    <div>
-      <label class="block">應有特休天數：
-        <input type="number" name="entitled_leave" value="{{ emp[11] }}" readonly class="border px-2 py-1 w-24 bg-gray-100">
-      </label>
+
+    <!-- 特休（小時制） -->
+    <div class="border rounded p-3">
+      <h2 class="font-semibold mb-2">特休（小時）</h2>
+
+      <div class="mb-2">
+        <label class="block">已用特休（小時）：
+          <!-- 優先用 emp[13]=used_leave_hours；若為空，用舊天數 emp[10]*8 回填 -->
+          <input type="number"
+                 name="used_leave_hours"
+                 step="0.5"
+                 min="0"
+                 value="{{ emp[13] if emp[13] is not none else ((emp[10] or 0) * 8) }}"
+                 class="border px-2 py-1 w-40">
+        </label>
+      </div>
+
+      <div class="mb-2">
+        <label class="block">應有特休（小時，唯讀）：
+          <!-- 優先 emp[12]=entitled_leave_hours；若為空，用舊天數 emp[11]*8 顯示 -->
+          <input type="number"
+                 step="0.5"
+                 readonly
+                 value="{{ emp[12] if emp[12] is not none else ((emp[11] or 0) * 8) }}"
+                 class="border px-2 py-1 w-40 bg-gray-100">
+        </label>
+        <div class="text-xs text-gray-500 mt-1">（系統會自動計算，若需個案比例調整，請用下方「特休調整」欄位）</div>
+      </div>
+
+      <div>
+        <label class="block">特休調整（小時，可正負，0.5 單位）：
+          <!-- emp[14] = leave_adjust_hours -->
+          <input type="number"
+                 name="leave_adjust_hours"
+                 step="0.5"
+                 value="{{ emp[14] if emp[14] is not none else 0 }}"
+                 class="border px-2 py-1 w-48">
+        </label>
+        <div class="text-xs text-gray-500 mt-1">例：想把最終應有特休從 24h 改成 16h，請填 -8。</div>
+      </div>
     </div>
 
     <!-- 病假 -->
     <div>
       <label class="block">可用病假（天）：
-        <input type="number" name="entitled_sick" value="{{ emp[12] }}" readonly class="border px-2 py-1 w-24 bg-gray-100">
+        <input type="number" name="entitled_sick" value="{{ emp[12] }}" readonly class="border px-2 py-1 w-24 bg-gray-100" hidden>
       </label>
     </div>
     <div>
       <label class="block">已用病假（天）：
-        <input type="number" name="used_sick" value="{{ emp[13] }}" min="0" class="border px-2 py-1 w-24">
+        <input type="number" name="used_sick" value="0" min="0" class="border px-2 py-1 w-24" hidden>
       </label>
     </div>
 
     <!-- 事假 -->
     <div>
       <label class="block">可用事假（天）：
-        <input type="number" name="entitled_personal" value="{{ emp[14] }}" readonly class="border px-2 py-1 w-24 bg-gray-100">
+        <input type="number" name="entitled_personal" value="{{ emp[14] }}" readonly class="border px-2 py-1 w-24 bg-gray-100" hidden>
       </label>
     </div>
     <div>
       <label class="block">已用事假（天）：
-        <input type="number" name="used_personal" value="{{ emp[15] }}" min="0" class="border px-2 py-1 w-24">
+        <input type="number" name="used_personal" value="0" min="0" class="border px-2 py-1 w-24" hidden>
       </label>
     </div>
 
     <!-- 婚假 -->
     <div>
       <label class="block">可用婚假（天）：
-        <input type="number" name="entitled_marriage" value="{{ emp[16] }}" readonly class="border px-2 py-1 w-24 bg-gray-100">
+        <input type="number" name="entitled_marriage" value="{{ emp[16] }}" readonly class="border px-2 py-1 w-24 bg-gray-100" hidden>
       </label>
     </div>
     <div>
       <label class="block">已用婚假（天）：
-        <input type="number" name="used_marriage" value="{{ emp[17] }}" min="0" class="border px-2 py-1 w-24">
+        <input type="number" name="used_marriage" value="0" min="0" class="border px-2 py-1 w-24" hidden>
       </label>
     </div>
 
