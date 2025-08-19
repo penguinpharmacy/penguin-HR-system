@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, abort, jsonify
+from flask import Flask, render_template, request, redirect, url_for, abort, jsonify, g, make_response, send_file
 from models import (
     calculate_seniority,
     entitled_leave_days,
@@ -13,12 +13,49 @@ import psycopg
 import socket
 from urllib.parse import urlparse
 from types import SimpleNamespace
-import functools
+import base64
+import io
+import csv
+import zipfile
+import json
 
 app = Flask(__name__)
 
 # 可調整「到期提醒視窗」天數（預設 60 天）
 ALERT_WINDOW_DAYS = int(os.environ.get("LEAVE_EXPIRY_ALERT_DAYS", "60"))
+
+# ========== 基本認證（可關閉：不設定 ADMIN_USER/PASS 即停用） ==========
+ADMIN_USER = os.environ.get('ADMIN_USER')
+ADMIN_PASS = os.environ.get('ADMIN_PASS')
+BACKUP_TOKEN = os.environ.get('BACKUP_TOKEN')  # /admin/backup 用
+
+def _parse_basic_auth(auth_header: str):
+    if not auth_header or not auth_header.startswith('Basic '):
+        return None, None
+    try:
+        raw = base64.b64decode(auth_header[6:]).decode('utf-8')
+        username, password = raw.split(':', 1)
+        return username, password
+    except Exception:
+        return None, None
+
+@app.before_request
+def _guard():
+    # 未設定帳密 → 不啟用認證（方便本機/開發）
+    if not ADMIN_USER or not ADMIN_PASS:
+        g.current_user = 'dev'
+        return
+    # 靜態與健康檢查不擋
+    if request.endpoint in ('static',):
+        return
+    auth = request.headers.get('Authorization') or ''
+    u, p = _parse_basic_auth(auth)
+    if u == ADMIN_USER and p == ADMIN_PASS:
+        g.current_user = u
+        return
+    resp = make_response('Authentication required', 401)
+    resp.headers['WWW-Authenticate'] = 'Basic realm="HR System"'
+    return resp
 
 # -------------------------
 # DB 連線
@@ -83,10 +120,7 @@ def _parse_half_hour_any(value_str):
     return v
 
 def _form_used_leave_hours() -> Decimal:
-    """
-    讀「已用特休」：優先 used_leave_hours（小時），否則讀 used_leave（天）×8。
-    表單還沒改成小時也沒關係。
-    """
+    """讀「已用特休」表單欄位（相容舊天數 ×8）。"""
     val_hours = request.form.get('used_leave_hours')
     if val_hours not in (None, ''):
         try:
@@ -104,9 +138,7 @@ def _form_used_leave_hours() -> Decimal:
     return Decimal('0')
 
 def _form_hours_or_days(hours_name='hours', days_name='days') -> Decimal:
-    """
-    讀請假表單：優先讀 hours（小時，0.5 單位），否則讀 days（天）×8。
-    """
+    """讀請假表單：優先小時（0.5 單位），否則天 ×8。"""
     val_h = request.form.get(hours_name)
     if val_h not in (None, ''):
         return _parse_half_hour(val_h)
@@ -130,10 +162,7 @@ def _ensure_date(d):
     return datetime.strptime(str(d), "%Y-%m-%d").date()
 
 def next_anniversary(start: date, today: date) -> date:
-    """
-    回傳『今天之後最近的一次到職週年日』。
-    處理 2/29 到職於非閏年以 2/28 代表。
-    """
+    """回傳『今天之後最近的一次到職週年日』（處理 2/29）。"""
     if start.month == 2 and start.day == 29:
         try_this = date(today.year, 2, 29)
         this_year_anniv = try_this if try_this.month == 2 and try_this.day == 29 else date(today.year, 2, 28)
@@ -159,11 +188,22 @@ def days_until(target: date, today: date) -> int:
     return (target - today).days
 
 # -------------------------
-# 資料表初始化/升級（自動跑）
+# 資料表初始化/升級（含分店、審核欄位、審計表）
 # -------------------------
 def init_db():
     with get_conn() as conn, conn.cursor() as c:
-        # employees
+        # ========== stores（分店） ==========
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS stores (
+              id SERIAL PRIMARY KEY,
+              name TEXT UNIQUE NOT NULL,
+              short_code TEXT UNIQUE,
+              is_active BOOLEAN DEFAULT TRUE
+            );
+        ''')
+        conn.commit()
+
+        # ========== employees ==========
         c.execute('''
             CREATE TABLE IF NOT EXISTS employees (
               id SERIAL PRIMARY KEY,
@@ -179,7 +219,8 @@ def init_db():
               is_active BOOLEAN DEFAULT TRUE,
               entitled_leave_hours NUMERIC(8,1),  -- 新：小時
               used_leave_hours NUMERIC(8,1),      -- 新：小時
-              leave_adjust_hours NUMERIC(8,1) DEFAULT 0 -- 新：調整（小時，可±）
+              leave_adjust_hours NUMERIC(8,1) DEFAULT 0, -- 新：調整（小時，可±）
+              store_id INTEGER REFERENCES stores(id)      -- 新：分店
             );
         ''')
         conn.commit()
@@ -198,9 +239,10 @@ def init_db():
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS entitled_leave_hours NUMERIC(8,1);")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS used_leave_hours NUMERIC(8,1);")
         c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS leave_adjust_hours NUMERIC(8,1) DEFAULT 0;")
+        c.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS store_id INTEGER REFERENCES stores(id);")
         conn.commit()
 
-        # insurances
+        # ========== insurances ==========
         c.execute("""
             CREATE TABLE IF NOT EXISTS insurances (
               id SERIAL PRIMARY KEY,
@@ -221,7 +263,7 @@ def init_db():
         c.execute("ALTER SEQUENCE insurances_id_seq OWNED BY insurances.id;")
         conn.commit()
 
-        # leave_records（加入 hours）
+        # ========== leave_records（加入 hours + 審核欄位） ==========
         c.execute('''
             CREATE TABLE IF NOT EXISTS leave_records (
               id           SERIAL PRIMARY KEY,
@@ -232,10 +274,34 @@ def init_db():
               days         INTEGER,
               hours        NUMERIC(8,1),
               note         TEXT,
-              created_at   TIMESTAMP DEFAULT NOW()
+              created_at   TIMESTAMP DEFAULT NOW(),
+              status       TEXT DEFAULT 'approved', -- pending/approved/rejected
+              created_by   TEXT,
+              approved_by  TEXT,
+              approved_at  TIMESTAMP
             );
         ''')
         c.execute("ALTER TABLE leave_records ADD COLUMN IF NOT EXISTS hours NUMERIC(8,1);")
+        c.execute("ALTER TABLE leave_records ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'approved';")
+        c.execute("ALTER TABLE leave_records ADD COLUMN IF NOT EXISTS created_by TEXT;")
+        c.execute("ALTER TABLE leave_records ADD COLUMN IF NOT EXISTS approved_by TEXT;")
+        c.execute("ALTER TABLE leave_records ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP;")
+        c.execute("UPDATE leave_records SET status = COALESCE(status, 'approved');")
+        conn.commit()
+
+        # ========== audit_logs ==========
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS audit_logs (
+              id SERIAL PRIMARY KEY,
+              table_name TEXT,
+              row_id INTEGER,
+              action TEXT,                -- insert/update/delete/approve/reject/backup/report
+              before_json TEXT,
+              after_json  TEXT,
+              acted_by    TEXT,
+              acted_at    TIMESTAMP DEFAULT NOW()
+            );
+        """)
         conn.commit()
 
         # 回填：員工小時欄位用天數*8 補上；歷史紀錄 hours 用 days*8 補上
@@ -250,25 +316,42 @@ def init_db():
         """)
         conn.commit()
 
-# === 新增：從 leave_records 動態彙總各假別已用小時 ===
+        # 預設分店種子資料（若不存在就建立）
+        c.execute("SELECT COUNT(*) FROM stores")
+        cnt = c.fetchone()[0] or 0
+        if cnt == 0:
+            c.execute("INSERT INTO stores (name, short_code) VALUES (%s,%s)", ('企鵝藥局', 'PHARM'))
+            c.execute("INSERT INTO stores (name, short_code) VALUES (%s,%s)", ('企鵝藥妝', 'DRUGS'))
+            conn.commit()
+
+# === Audit Log 寫入小工具 ===
+def write_audit(conn, table, row_id, action, before_obj=None, after_obj=None, acted_by=None):
+    with conn.cursor() as c:
+        c.execute("""
+          INSERT INTO audit_logs (table_name, row_id, action, before_json, after_json, acted_by)
+          VALUES (%s,%s,%s,%s,%s,%s)
+        """, (table, row_id, action,
+              json.dumps(before_obj or {}, ensure_ascii=False),
+              json.dumps(after_obj  or {}, ensure_ascii=False),
+              acted_by or getattr(g, 'current_user', None)))
+    conn.commit()
+
+# === 從 leave_records 動態彙總（只計 approved） ===
 def _fetch_leave_usage_hours(conn):
     """
     回傳格式：
     {
-      emp_id: {
-        '病假': 小時(float),
-        '事假': 小時(float),
-        '婚假': 小時(float),
-        '特休': 小時(float),
-      },
+      emp_id: { '病假': 小時, '事假': 小時, '婚假': 小時, '特休': 小時 },
       ...
     }
+    （只統計 status='approved'）
     """
     data = {}
     with conn.cursor() as c:
         c.execute("""
             SELECT employee_id, leave_type, COALESCE(SUM(hours),0)
               FROM leave_records
+             WHERE status='approved'
              GROUP BY employee_id, leave_type
         """)
         for emp_id, ltype, hrs in c.fetchall():
@@ -277,63 +360,95 @@ def _fetch_leave_usage_hours(conn):
     return data
 
 # -------------------------
-# 首頁：員工特休總覽（特休=小時；病/事/婚=依紀錄動態計算）
+# 首頁：員工特休總覽（分店過濾 + 分頁）
 # -------------------------
 @app.route('/')
 def index():
     init_db()
     show_all = (request.args.get('all') == '1')
 
-    with get_conn() as conn, conn.cursor() as c:
-        base_select = '''
-            SELECT
-                id, name, start_date, end_date,
-                department, job_level,
-                salary_grade, base_salary, position_allowance,
-                on_leave_suspend, used_leave, entitled_leave,
-                entitled_leave_hours, used_leave_hours,
-                entitled_sick, used_sick,
-                entitled_personal, used_personal,
-                entitled_marriage, used_marriage,
-                is_active,
-                leave_adjust_hours
-            FROM employees
-        '''
-        if show_all:
-            c.execute(base_select + " ORDER BY id")
-        else:
-            c.execute(base_select + '''
-                WHERE (end_date IS NULL OR end_date >= CURRENT_DATE)
-                  AND COALESCE(is_active, TRUE) = TRUE
-                ORDER BY id
-            ''')
-        rows = c.fetchall()
+    # 分店與分頁參數
+    try:
+        current_store_id = int(request.args.get('store_id')) if request.args.get('store_id') else None
+    except ValueError:
+        current_store_id = None
+    try:
+        page = max(int(request.args.get('page', '1')), 1)
+    except ValueError:
+        page = 1
+    try:
+        page_size = max(min(int(request.args.get('page_size', '20')), 200), 5)
+    except ValueError:
+        page_size = 20
+    offset = (page - 1) * page_size
 
-        # ★ 把所有請假紀錄的已用小時彙總起來
-        usage_map = _fetch_leave_usage_hours(conn)
+    # 分店列表
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute("SELECT id, name, is_active FROM stores WHERE COALESCE(is_active, TRUE)=TRUE ORDER BY id")
+        stores = c.fetchall()
+
+    where = []
+    params = []
+    if not show_all:
+        where.append("(e.end_date IS NULL OR e.end_date >= CURRENT_DATE)")
+        where.append("COALESCE(e.is_active, TRUE) = TRUE")
+    if current_store_id:
+        where.append("e.store_id = %s")
+        params.append(current_store_id)
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+    # 總數
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute(f"SELECT COUNT(*) FROM employees e {where_sql}", tuple(params))
+        total_count = c.fetchone()[0] or 0
+
+    # 主查詢
+    with get_conn() as conn, conn.cursor() as c:
+        base_select = f'''
+            SELECT
+                e.id, e.name, e.start_date, e.end_date,
+                e.department, e.job_level,
+                e.salary_grade, e.base_salary, e.position_allowance,
+                e.on_leave_suspend, e.used_leave, e.entitled_leave,
+                e.entitled_leave_hours, e.used_leave_hours,
+                e.entitled_sick, e.used_sick,
+                e.entitled_personal, e.used_personal,
+                e.entitled_marriage, e.used_marriage,
+                e.is_active,
+                e.leave_adjust_hours,
+                e.store_id,
+                s.name AS store_name
+            FROM employees e
+            LEFT JOIN stores s ON s.id = e.store_id
+            {where_sql}
+            ORDER BY e.id
+            LIMIT %s OFFSET %s
+        '''
+        c.execute(base_select, tuple(params) + (page_size, offset))
+        rows = c.fetchall()
+        usage_map = _fetch_leave_usage_hours(conn)  # 彙總 approved 假單
 
     employees = []
     for (sid, name, sd, ed, dept, level, grade, base, allowance,
          suspend, used_days, ent_days,
          ent_hours, used_hours,
          sick_ent, sick_used, per_ent, per_used, mar_ent, mar_used,
-         is_active, adj_hours) in rows:
+         is_active, adj_hours, store_id, store_name) in rows:
 
-        # 特休：以小時為主
+        # 特休（小時制）
         ent_h_base = float(ent_hours) if ent_hours is not None else float((ent_days or 0) * 8)
         used_h     = float(used_hours) if used_hours is not None else float((used_days or 0) * 8)
         adj        = float(adj_hours or 0)
         ent_h      = max(ent_h_base + adj, 0.0)
 
-        # 讀彙總（小時）
+        # 依紀錄動態計算（只計 approved）
         u = usage_map.get(sid, {})
         sick_used_hours     = float(u.get('病假', 0.0))
         personal_used_hours = float(u.get('事假', 0.0))
         marriage_used_hours = float(u.get('婚假', 0.0))
-        # 若要讓特休「已用」也改成以紀錄為準，可啟用下一行：
-        # used_h = float(u.get('特休', used_h))
+        # 要讓特休已用也跟著紀錄？可改為：used_h = float(u.get('特休', used_h))
 
-        # 以「天」呈現病/事/婚假剩餘（保留你原本 UI）
+        # 以天呈現病/事/婚
         sick_ent_days      = int(sick_ent or 0)
         personal_ent_days  = int(per_ent or 0)
         marriage_ent_days  = int(mar_ent or 0)
@@ -365,14 +480,12 @@ def index():
             'years': years,
             'months': months,
 
-            # 特休（小時）
             'entitled': ent_h,
             'used': used_h,
             'remaining': max(ent_h - used_h, 0.0),
 
             'suspend': suspend,
 
-            # 病/事/婚以「天」呈現（從歷史紀錄動態計算）
             'entitled_sick': sick_ent_days,
             'used_sick': sick_used_days,
             'remaining_sick': remaining_sick_days,
@@ -386,12 +499,30 @@ def index():
             'remaining_marriage': remaining_marriage_days,
 
             'is_active': is_active,
+            'store_id': store_id,
+            'store_name': store_name or '未分店',
         })
 
-    return render_template('index.html', employees=employees, show_all=show_all)
+    total_pages = (total_count + page_size - 1) // page_size
+    pagination = {
+        'page': page,
+        'page_size': page_size,
+        'total': total_count,
+        'total_pages': total_pages,
+        'has_prev': page > 1,
+        'has_next': page < total_pages
+    }
+
+    return render_template('index.html',
+                           employees=employees,
+                           show_all=show_all,
+                           stores=stores,
+                           current_store_id=current_store_id,
+                           pagination=pagination,
+                           page_size=page_size)
 
 # -------------------------
-# 新增員工（支援調整值）
+# 新增員工（支援調整值；暫未加入 store_id 表單，之後可加）
 # -------------------------
 @app.route('/add', methods=['GET','POST'])
 def add_employee():
@@ -406,6 +537,8 @@ def add_employee():
         base       = int(request.form.get('base_salary') or 0)
         allowance  = int(request.form.get('position_allowance') or 0)
         suspend    = bool(request.form.get('suspend'))
+        store_id_s = request.form.get('store_id')  # 若你表單加了分店下拉
+        store_id   = int(store_id_s) if store_id_s else None
 
         sd_date = datetime.strptime(start_date, '%Y-%m-%d').date()
         ed_date = datetime.strptime(end_date_s, '%Y-%m-%d').date() if end_date_s else None
@@ -433,7 +566,7 @@ def add_employee():
                   entitled_sick, used_sick,
                   entitled_personal, used_personal,
                   entitled_marriage, used_marriage,
-                  is_active, leave_adjust_hours
+                  is_active, leave_adjust_hours, store_id
                 ) VALUES (
                   %s,%s,%s,
                   %s,%s,%s,
@@ -444,26 +577,30 @@ def add_employee():
                   %s,0,
                   %s,0,
                   %s,0,
-                  %s,%s
+                  %s,%s,%s
                 )
             ''', (
                 name, start_date, ed_date,
                 dept, level, grade,
                 base, allowance,
                 suspend,
-                int(used_hours / 8), int(entitled_days),       # 天（保留相容用）
-                str(entitled_hours), str(used_hours),          # 小時（主用）
+                int(used_hours / 8), int(entitled_days),
+                str(entitled_hours), str(used_hours),
                 sick_ent,
                 per_ent,
                 mar_ent,
-                is_active, str(adj_hours)
+                is_active, str(adj_hours), store_id
             ))
             conn.commit()
         return redirect(url_for('index'))
-    return render_template('add_employee.html')
+    # 分店清單供表單下拉（若你要加）
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute("SELECT id, name FROM stores WHERE COALESCE(is_active, TRUE)=TRUE ORDER BY id")
+        stores = c.fetchall()
+    return render_template('add_employee.html', stores=stores)
 
 # -------------------------
-# 編輯員工（支援調整值）
+# 編輯員工（支援調整值 + 分店）
 # -------------------------
 @app.route('/edit/<int:emp_id>', methods=['GET','POST'])
 def edit_employee(emp_id):
@@ -478,6 +615,8 @@ def edit_employee(emp_id):
         base       = int(request.form.get('base_salary') or 0)
         allowance  = int(request.form.get('position_allowance') or 0)
         suspend    = bool(request.form.get('suspend'))
+        store_id_s = request.form.get('store_id')
+        store_id   = int(store_id_s) if store_id_s else None
 
         sd_date = datetime.strptime(start_date, '%Y-%m-%d').date()
         ed_date = datetime.strptime(end_date_s, '%Y-%m-%d').date() if end_date_s else None
@@ -513,20 +652,22 @@ def edit_employee(emp_id):
                   entitled_personal  = %s,  used_personal  = %s,
                   entitled_marriage  = %s,  used_marriage  = %s,
                   is_active          = %s,
-                  leave_adjust_hours = %s
+                  leave_adjust_hours = %s,
+                  store_id           = %s
                 WHERE id = %s
             ''', (
                 name, sd_date, ed_date,
                 dept, level, grade,
                 base, allowance,
                 suspend,
-                int(used_hours / 8), int(entitled_days),  # 天（保留）
-                str(entitled_hours), str(used_hours),     # 小時（主用）
+                int(used_hours / 8), int(entitled_days),
+                str(entitled_hours), str(used_hours),
                 sick_ent, 0,
                 per_ent,  0,
                 mar_ent,  0,
                 is_active,
                 str(adj_hours),
+                store_id,
                 emp_id
             ))
             conn.commit()
@@ -540,12 +681,14 @@ def edit_employee(emp_id):
               base_salary, position_allowance,
               on_leave_suspend, used_leave, entitled_leave,
               entitled_leave_hours, used_leave_hours,
-              leave_adjust_hours
+              leave_adjust_hours, store_id
             FROM employees
             WHERE id = %s
         ''', (emp_id,))
         r = c.fetchone()
-    return render_template('edit_employee.html', emp=r)
+        c.execute("SELECT id, name FROM stores WHERE COALESCE(is_active, TRUE)=TRUE ORDER BY id")
+        stores = c.fetchall()
+    return render_template('edit_employee.html', emp=r, stores=stores)
 
 # -------------------------
 # 保險列表（預設只顯示在職）
@@ -626,8 +769,6 @@ def edit_insurance(emp_id):
                         ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ''', (emp_id, pl, ph, cl, ch, r6, oi, tot, note))
                 conn.commit()
-            return redirect(url_for('list_insurance'))
-
         with conn.cursor() as c:
             c.execute('''
                 SELECT id, employee_id,
@@ -643,7 +784,7 @@ def edit_insurance(emp_id):
     return render_template('edit_insurance.html', emp_id=emp_id, ins=r)
 
 # -------------------------
-# 請假紀錄（小時制）
+# 請假紀錄（小時制 + 審核）
 # -------------------------
 @app.route('/history/<int:emp_id>/<leave_type>')
 def leave_history(emp_id, leave_type):
@@ -652,24 +793,27 @@ def leave_history(emp_id, leave_type):
         c.execute('SELECT name FROM employees WHERE id=%s', (emp_id,))
         name = c.fetchone()[0]
         c.execute('''
-            SELECT id, date_from, date_to, hours, days, note, created_at
+            SELECT id, date_from, date_to, hours, days, note, created_at, status, created_by, approved_by, approved_at
               FROM leave_records
-             WHERE employee_id=%s
-               AND leave_type=%s
+             WHERE employee_id=%s AND leave_type=%s
              ORDER BY date_from DESC
         ''', (emp_id, leave_type))
         rows = c.fetchall()
 
     records = []
-    for rid, df, dt, hours, days, note, created in rows:
+    for rid, df, dt, hours, days, note, created, status, created_by, approved_by, approved_at in rows:
         records.append(SimpleNamespace(
             id=rid,
             start_date = df.strftime('%Y-%m-%d'),
             end_date   = dt.strftime('%Y-%m-%d'),
-            hours      = float(hours or 0),   # 新：小時
-            days       = int(days or 0),      # 舊：天（相容模板用）
+            hours      = float(hours or 0),
+            days       = int(days or 0),
             note       = note or '',
-            created_at = created.strftime('%Y-%m-%d %H:%M')
+            created_at = created.strftime('%Y-%m-%d %H:%M'),
+            status     = status or 'approved',
+            created_by = created_by or '',
+            approved_by= approved_by or '',
+            approved_at= approved_at.strftime('%Y-%m-%d %H:%M') if approved_by else ''
         ))
 
     return render_template('history.html',
@@ -685,16 +829,21 @@ def add_leave_record(emp_id, leave_type):
         df   = request.form['start_date']
         dt   = request.form['end_date']
         note = request.form.get('note','')
-        hours = _form_hours_or_days('hours', 'days')  # 可接收 hours 或 days
-        days_int = int(hours // 8)  # 相容舊欄位
+        hours = _form_hours_or_days('hours', 'days')
+        days_int = int(hours // 8)
 
         with get_conn() as conn, conn.cursor() as c:
             c.execute('''
                 INSERT INTO leave_records
-                  (employee_id, leave_type, date_from, date_to, hours, days, note)
-                VALUES (%s,%s,%s,%s,%s,%s,%s)
-            ''', (emp_id, leave_type, df, dt, str(hours), days_int, note))
+                  (employee_id, leave_type, date_from, date_to, hours, days, note, status, created_by)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                RETURNING id
+            ''', (emp_id, leave_type, df, dt, str(hours), days_int, note, 'pending', getattr(g,'current_user', None)))
+            rid = c.fetchone()[0]
             conn.commit()
+            write_audit(conn, 'leave_records', rid, 'insert', None, {
+                'employee_id': emp_id, 'leave_type': leave_type, 'hours': float(hours), 'note': note, 'status':'pending'
+            })
         return redirect(url_for('leave_history', emp_id=emp_id, leave_type=leave_type))
 
     return render_template('add_leave.html', emp_id=emp_id, leave_type=leave_type)
@@ -710,6 +859,9 @@ def edit_leave_record(emp_id, leave_type, record_id):
         days_int = int(hours // 8)
 
         with get_conn() as conn, conn.cursor() as c:
+            c.execute('SELECT date_from, date_to, hours, days, note FROM leave_records WHERE id=%s', (record_id,))
+            bdf, bdt, bhrs, bdays, bnote = c.fetchone()
+
             c.execute('''
                 UPDATE leave_records
                    SET date_from = %s,
@@ -720,6 +872,12 @@ def edit_leave_record(emp_id, leave_type, record_id):
                  WHERE id = %s
             ''', (df, dt, str(hours), days_int, note, record_id))
             conn.commit()
+            write_audit(conn, 'leave_records', record_id, 'update', {
+                'date_from': bdf.strftime('%Y-%m-%d'), 'date_to': bdt.strftime('%Y-%m-%d'),
+                'hours': float(bhrs or 0), 'days': int(bdays or 0), 'note': bnote or ''
+            }, {
+                'date_from': df, 'date_to': dt, 'hours': float(hours), 'days': days_int, 'note': note
+            })
         return redirect(url_for('leave_history', emp_id=emp_id, leave_type=leave_type))
 
     with get_conn() as conn, conn.cursor() as c:
@@ -739,6 +897,42 @@ def edit_leave_record(emp_id, leave_type, record_id):
                            hours     =float(hours or 0),
                            days      =int(days or 0),
                            note      =note or '')
+
+@app.post('/history/<int:emp_id>/<leave_type>/approve/<int:record_id>')
+def approve_leave(emp_id, leave_type, record_id):
+    init_db()
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute('SELECT status FROM leave_records WHERE id=%s', (record_id,))
+        row = c.fetchone()
+        if not row:
+            return abort(404)
+        before = {'status': row[0]}
+        c.execute("""
+          UPDATE leave_records
+             SET status='approved', approved_by=%s, approved_at=NOW()
+           WHERE id=%s
+        """, (getattr(g,'current_user', None), record_id))
+        conn.commit()
+        write_audit(conn, 'leave_records', record_id, 'approve', before, {'status':'approved'})
+    return redirect(url_for('leave_history', emp_id=emp_id, leave_type=leave_type))
+
+@app.post('/history/<int:emp_id>/<leave_type>/reject/<int:record_id>')
+def reject_leave(emp_id, leave_type, record_id):
+    init_db()
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute('SELECT status FROM leave_records WHERE id=%s', (record_id,))
+        row = c.fetchone()
+        if not row:
+            return abort(404)
+        before = {'status': row[0]}
+        c.execute("""
+          UPDATE leave_records
+             SET status='rejected', approved_by=%s, approved_at=NOW()
+           WHERE id=%s
+        """, (getattr(g,'current_user', None), record_id))
+        conn.commit()
+        write_audit(conn, 'leave_records', record_id, 'reject', before, {'status':'rejected'})
+    return redirect(url_for('leave_history', emp_id=emp_id, leave_type=leave_type))
 
 # -------------------------
 # 薪資/保險明細
@@ -931,9 +1125,113 @@ def leave_expiring_json():
     })
 
 # -------------------------
+# 月結報表（ZIP：請假彙總/員工清單/保險）
+# -------------------------
+@app.get('/reports')
+def monthly_reports():
+    init_db()
+    month = request.args.get('month')
+    if not month:
+        month = date.today().strftime('%Y-%m')
+    start = f'{month}-01'
+    y, m = map(int, month.split('-'))
+    if m == 12:
+        next_month = f'{y+1}-01-01'
+    else:
+        next_month = f'{y}-{m+1:02d}-01'
+
+    buf = io.BytesIO()
+    zf = zipfile.ZipFile(buf, mode='w', compression=zipfile.ZIP_DEFLATED)
+
+    with get_conn() as conn, conn.cursor() as c:
+        # 1) 本月請假彙總（approved）
+        c.execute("""
+          SELECT e.id, e.name, lr.leave_type,
+                 COALESCE(SUM(lr.hours),0) AS total_hours
+            FROM leave_records lr
+            JOIN employees e ON e.id = lr.employee_id
+           WHERE lr.status='approved'
+             AND lr.date_from >= %s AND lr.date_from < %s
+           GROUP BY e.id, e.name, lr.leave_type
+           ORDER BY e.id, lr.leave_type
+        """, (start, next_month))
+        rows = c.fetchall()
+        s = io.StringIO(); w = csv.writer(s)
+        w.writerow(['員工ID','姓名','假別','本月合計(小時)'])
+        for r in rows:
+            w.writerow(r)
+        zf.writestr('leave_summary.csv', '\ufeff' + s.getvalue())
+
+        # 2) 當月在職員工清單
+        c.execute("""
+          SELECT id, name, department, job_level, salary_grade, base_salary, position_allowance, start_date, end_date, store_id
+            FROM employees
+           WHERE (end_date IS NULL OR end_date >= %s)
+           ORDER BY id
+        """, (start,))
+        s = io.StringIO(); w = csv.writer(s)
+        w.writerow(['ID','姓名','部門','職等','薪資級距','底薪','職務津貼','到職日','離職日','分店ID'])
+        for r in c.fetchall():
+            w.writerow(r)
+        zf.writestr('employees.csv', '\ufeff' + s.getvalue())
+
+        # 3) 保險負擔（在職）
+        c.execute("""
+          SELECT e.id, e.name,
+                 i.personal_labour, i.personal_health,
+                 i.company_labour, i.company_health,
+                 i.retirement6, i.occupational_ins, i.total_company, i.note
+            FROM employees e
+            LEFT JOIN insurances i ON e.id = i.employee_id
+           WHERE (e.end_date IS NULL OR e.end_date >= %s)
+           ORDER BY e.id
+        """, (start,))
+        s = io.StringIO(); w = csv.writer(s)
+        w.writerow(['ID','姓名','個人勞保','個人健保','公司勞保','公司健保','退6%','職保','公司負擔合計','備註'])
+        for r in c.fetchall():
+            w.writerow(r)
+        zf.writestr('insurances.csv', '\ufeff' + s.getvalue())
+
+    zf.close()
+    buf.seek(0)
+    with get_conn() as conn:
+        write_audit(conn, 'reports', 0, 'report', None, {'month': month})
+    return send_file(buf, mimetype='application/zip', as_attachment=True,
+                     download_name=f'reports_{month}.zip')
+
+# -------------------------
+# 全庫備份（CSV ZIP）
+# -------------------------
+@app.get('/admin/backup')
+def admin_backup():
+    init_db()
+    if BACKUP_TOKEN and request.args.get('token') != BACKUP_TOKEN:
+        return abort(403)
+
+    tables = ['stores', 'employees', 'insurances', 'leave_records', 'audit_logs']
+    buf = io.BytesIO()
+    zf = zipfile.ZipFile(buf, mode='w', compression=zipfile.ZIP_DEFLATED)
+
+    with get_conn() as conn, conn.cursor() as c:
+        for t in tables:
+            c.execute(f"SELECT * FROM {t}")
+            colnames = [desc[0] for desc in c.description]
+            s = io.StringIO(); w = csv.writer(s)
+            w.writerow(colnames)
+            for row in c.fetchall():
+                w.writerow(row)
+            zf.writestr(f'{t}.csv', '\ufeff' + s.getvalue())
+
+    zf.close()
+    buf.seek(0)
+    with get_conn() as conn:
+        write_audit(conn, 'backup', 0, 'backup', None, {'by': getattr(g,'current_user', None)})
+    return send_file(buf, mimetype='application/zip', as_attachment=True,
+                     download_name=f'backup_{date.today().isoformat()}.zip')
+
+# -------------------------
 # 啟動
 # -------------------------
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-
