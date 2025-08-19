@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <title>員工特休總覽｜後台</title>
-  <link rel="icon" href="/static/favicon.ico">
-  <link href="/static/style.css" rel="stylesheet">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
   <style>
     /* ========= Brand & base ========= */
     :root{
@@ -84,11 +84,15 @@
     <div class="container">
       <!-- Logo / 導覽 -->
       <div class="nav">
-        <div class="brand">
-          <!-- 若沒有 /static/logo.png 會顯示文字 -->
-          <img src="/static/logo.png" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+        <a class="brand" href="/">
+          <!-- 使用 url_for 正確取靜態檔；失敗就顯示備用文字 -->
+          <img
+            src="{{ url_for('static', filename='logo.png') }}"
+            alt="公司 Logo"
+            onerror="this.closest('.brand').querySelector('.name').style.display='inline-block'; this.remove();">
           <div class="name" style="display:none">企業後台</div>
-        </div>
+        </a>
+
         <div class="text-2xl">員工特休總覽</div>
 
         <div class="nav-links">
@@ -303,5 +307,3 @@
   </script>
 </body>
 </html>
-
-
