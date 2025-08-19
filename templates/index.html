@@ -103,6 +103,7 @@
           <a class="btn" href="{{ url_for('index', branch=current_branch, all=('0' if show_all else '1')) }}">
             {{ '顯示在職員工' if show_all else '顯示所有員工（含離職）' }}
           </a>
+          <a class="btn" href="{{ url_for('branch_management') }}?branch={{ current_branch }}">分店管理</a>
           <a class="btn" href="{{ url_for('list_insurance') }}?branch={{ current_branch }}">保險負擔</a>
           <a class="btn" href="{{ url_for('add_employee') }}?branch={{ current_branch }}">新增員工</a>
           <a class="btn btn-primary" href="{{ url_for('leave_expiring') }}?branch={{ current_branch }}">特休即將到期</a>
