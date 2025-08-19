@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, abort
+from flask import Flask, render_template, request, redirect, url_for, abort, jsonify
 from models import (
     calculate_seniority,
     entitled_leave_days,
@@ -15,6 +15,9 @@ from urllib.parse import urlparse
 from types import SimpleNamespace
 
 app = Flask(__name__)
+
+# 可調整「到期提醒視窗」天數（預設 60 天）
+ALERT_WINDOW_DAYS = int(os.environ.get("LEAVE_EXPIRY_ALERT_DAYS", "60"))
 
 # -------------------------
 # DB 連線
@@ -116,6 +119,47 @@ def _form_hours_or_days(hours_name='hours', days_name='days') -> Decimal:
             raise ValueError("天數需大於 0")
         return d * 8
     raise ValueError("請輸入請假時數")
+
+# === 新增：到職日制的週年與倒數計算 ===
+def _ensure_date(d):
+    """DB 取出的若已是 date 就直接回傳；若是 str（YYYY-MM-DD）則轉換。"""
+    if d is None:
+        return None
+    if isinstance(d, date):
+        return d
+    return datetime.strptime(str(d), "%Y-%m-%d").date()
+
+def next_anniversary(start: date, today: date) -> date:
+    """
+    回傳『今天之後最近的一次到職週年日』。
+    處理 2/29 到職於非閏年以 2/28 代表。
+    """
+    if start.month == 2 and start.day == 29:
+        # 以當年是否閏年決定 2/29 或 2/28
+        try_this = date(today.year, 2, 29)
+        this_year_anniv = try_this if try_this.month == 2 and try_this.day == 29 else date(today.year, 2, 28)
+    else:
+        # 一般情況可能拋 ValueError（極少見），則退到 2/28
+        try:
+            this_year_anniv = start.replace(year=today.year)
+        except ValueError:
+            this_year_anniv = date(today.year, 2, 28)
+
+    if this_year_anniv <= today:
+        # 今年已過，取下一年
+        ny = today.year + 1
+        if start.month == 2 and start.day == 29:
+            try_next = date(ny, 2, 29)
+            return try_next if (try_next.month == 2 and try_next.day == 29) else date(ny, 2, 28)
+        else:
+            try:
+                return start.replace(year=ny)
+            except ValueError:
+                return date(ny, 2, 28)
+    return this_year_anniv
+
+def days_until(target: date, today: date) -> int:
+    return (target - today).days
 
 # -------------------------
 # 資料表初始化/升級（自動跑）
@@ -709,6 +753,133 @@ def restore_employee(emp_id):
         ''', (emp_id,))
         conn.commit()
     return redirect(url_for('index', all='1'))
+
+# -------------------------
+# 新增：特休到期提醒（到職日制）
+# -------------------------
+def _fetch_active_employees_for_expiry():
+    """抓取在職員工與計算特休剩餘（小時）。"""
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute('''
+            SELECT
+                id, name, start_date, end_date,
+                COALESCE(entitled_leave_hours, COALESCE(entitled_leave,0)*8.0) AS ent_hours,
+                COALESCE(used_leave_hours,     COALESCE(used_leave,0)    *8.0) AS used_hours,
+                COALESCE(leave_adjust_hours, 0) AS adj_hours,
+                COALESCE(is_active, TRUE) AS is_active
+            FROM employees
+            WHERE (end_date IS NULL OR end_date >= CURRENT_DATE)
+              AND COALESCE(is_active, TRUE) = TRUE
+            ORDER BY id
+        ''')
+        rows = c.fetchall()
+
+    today = date.today()
+    result = []
+    for (eid, name, sd, ed, ent_h, used_h, adj_h, is_act) in rows:
+        sd = _ensure_date(sd)
+        if not sd:
+            continue
+        expiry = next_anniversary(sd, today)
+        entitled = max(float(ent_h or 0) + float(adj_h or 0), 0.0)
+        used = float(used_h or 0)
+        remaining = max(entitled - used, 0.0)
+        if remaining <= 0:
+            continue
+        result.append({
+            "id": eid,
+            "name": name,
+            "start_date": sd.isoformat(),
+            "expiry_date": expiry.isoformat(),
+            "days_left": days_until(expiry, today),
+            "remain_hours": round(remaining, 1)
+        })
+    return result
+
+@app.route('/alerts/leave-expiring')
+def leave_expiring():
+    """純 HTML 版列表（不新增模板也能用）。"""
+    init_db()
+    data = _fetch_active_employees_for_expiry()
+    # 過濾提醒視窗
+    data = [d for d in data if 0 <= d["days_left"] <= ALERT_WINDOW_DAYS]
+    data.sort(key=lambda x: x["days_left"])
+
+    # 簡易 HTML（與你現有 style.css 相容）
+    html_rows = []
+    for d in data:
+        badge = ''
+        if d["days_left"] <= 30:
+            badge = '<span style="background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:9999px;font-size:12px;">緊急</span>'
+        qty_tag = ''
+        if d["remain_hours"] >= 40:
+            qty_tag = '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:9999px;font-size:12px;margin-left:6px;">偏多</span>'
+        html_rows.append(f"""
+        <tr>
+          <td>{d['name']}</td>
+          <td>{d['remain_hours']}{qty_tag}</td>
+          <td>{d['expiry_date']}</td>
+          <td>{d['days_left']} {badge}</td>
+        </tr>
+        """)
+
+    content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>特休即將到期</title>
+      <link href="/static/style.css" rel="stylesheet">
+      <style>
+        table {{ width:100%; border-collapse:collapse; }}
+        th, td {{ padding:8px 10px; border-bottom:1px solid #eee; text-align:left; }}
+        th {{ font-weight:600; color:#374151; }}
+        .card {{ border:1px solid #e5e7eb; border-radius:12px; padding:16px; margin-bottom:16px; }}
+      </style>
+    </head>
+    <body class="p-4">
+      <h1 class="text-2xl mb-4">特休即將到期</h1>
+
+      <div class="card">
+        <div>今天：{date.today().isoformat()}　|　提醒視窗：{ALERT_WINDOW_DAYS} 天內</div>
+        <div>共有 <strong>{len(data)}</strong> 位員工特休即將到期</div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>姓名</th>
+            <th>剩餘特休（小時）</th>
+            <th>到期日</th>
+            <th>剩餘天數</th>
+          </tr>
+        </thead>
+        <tbody>
+          {''.join(html_rows) if html_rows else f'<tr><td colspan="4" style="color:#6b7280;">未來 {ALERT_WINDOW_DAYS} 天內沒有到期的特休</td></tr>'}
+        </tbody>
+      </table>
+
+      <div style="margin-top:16px;">
+        <a href="{url_for('index')}" class="text-blue-600">← 返回首頁</a>
+      </div>
+    </body>
+    </html>
+    """
+    return content
+
+@app.route('/alerts/leave-expiring/json')
+def leave_expiring_json():
+    """JSON 版，方便 Dashboard 卡片數字或前端用 fetch 取用。"""
+    init_db()
+    data = _fetch_active_employees_for_expiry()
+    data = [d for d in data if 0 <= d["days_left"] <= ALERT_WINDOW_DAYS]
+    data.sort(key=lambda x: x["days_left"])
+    return jsonify({
+        "today": date.today().isoformat(),
+        "alert_within_days": ALERT_WINDOW_DAYS,
+        "count": len(data),
+        "items": data
+    })
 
 # -------------------------
 # 啟動
