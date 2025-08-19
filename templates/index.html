@@ -32,7 +32,7 @@
     .btn-primary { border-color:#2563eb; color:#2563eb; }
     .btn-primary:hover { background:#eff6ff; }
 
-    /* 新增：小卡片樣式 */
+    /* 小卡片樣式 */
     .card { border:1px solid #e5e7eb; border-radius:12px; padding:12px 14px; margin-bottom:12px; }
     .muted { color:#6b7280; }
     .badge { padding:2px 8px; border-radius:9999px; font-size:12px; }
@@ -50,8 +50,6 @@
     </a>
     <a href="{{ url_for('list_insurance') }}" class="text-green-600 underline">保險負擔</a>
     <a href="{{ url_for('add_employee') }}" class="text-purple-600 underline">新增員工</a>
-
-    <!-- 新增：導覽入口 -->
     <a href="{{ url_for('leave_expiring') }}" class="text-blue-600 underline">特休即將到期</a>
 
     <span class="text-gray-600 text-sm">
@@ -65,7 +63,7 @@
     </span>
   </div>
 
-  <!-- 新增：提醒卡片（自動抓 JSON 數字） -->
+  <!-- 提醒卡片 -->
   <div id="leave-expiry-card" class="card">
     <div class="muted text-sm">特休到期提醒</div>
     <div style="display:flex;align-items:baseline;gap:8px;">
@@ -75,11 +73,10 @@
     <div class="mt-2">
       <a href="{{ url_for('leave_expiring') }}" class="text-blue-600">查看到期名單 →</a>
     </div>
-    <!-- 可選：顯示前三名 -->
     <div id="leave-expiry-top3" class="mt-2 text-sm"></div>
   </div>
 
-  <!-- 工具列：搜尋 + 匯出 CSV（只匯出目前畫面顯示的列） -->
+  <!-- 工具列：搜尋 + 匯出 CSV（只匯出目前顯示的列） -->
   <div class="toolbar mb-3">
     <input id="searchInput" class="input" type="search" placeholder="搜尋 姓名／部門／職等…">
     <button class="btn" id="clearBtn" type="button">清除搜尋</button>
@@ -137,17 +134,17 @@
         </td>
         <td class="right">
           <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='病假') }}" class="text-blue-600">
-            {{ e.remaining_sick }}
+            {{ '%.1f'|format(e.remaining_sick) }}
           </a>
         </td>
         <td class="right">
           <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='事假') }}" class="text-blue-600">
-            {{ e.remaining_personal }}
+            {{ '%.1f'|format(e.remaining_personal) }}
           </a>
         </td>
         <td class="right">
           <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='婚假') }}" class="text-blue-600">
-            {{ e.remaining_marriage }}
+            {{ '%.1f'|format(e.remaining_marriage) }}
           </a>
         </td>
         <td>{{ '是' if e.suspend else '否' }}</td>
@@ -269,7 +266,7 @@
       // 初次載入
       applyFilter();
 
-      // ===== 新增：抓取到期提醒數字 =====
+      // 抓取到期提醒數字
       const countEl = document.getElementById('leave-expiry-count');
       const winEl = document.getElementById('leave-expiry-window');
       const top3El = document.getElementById('leave-expiry-top3');
@@ -279,8 +276,6 @@
         .then(d => {
           countEl.textContent = d.count + ' 人';
           winEl.textContent = `（${d.alert_within_days} 天內）`;
-
-          // 顯示前三名詳情（名稱／到期日／剩餘小時）
           const top3 = (d.items || []).slice(0, 3);
           if (top3.length) {
             const items = top3.map(x => {
@@ -296,7 +291,6 @@
         .catch(() => {
           countEl.textContent = '讀取失敗';
         });
-      // ==================================
     })();
   </script>
 </body>
