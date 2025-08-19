@@ -8,6 +8,17 @@
 <body class="p-4">
   <h1 class="text-2xl mb-4">新增員工</h1>
   <form action="/add" method="post" class="space-y-4">
+    <!-- 分店 -->
+    <div>
+      <label class="block">分店：</label>
+      <select name="branch" class="border px-2 py-1 w-full" required>
+        <option value="">請選擇分店</option>
+        <option value="penguin_pharmacy">企鵝藥局</option>
+        <option value="penguin_health">企鵝藥妝</option>
+        <!-- 之後有新分店再加 -->
+      </select>
+    </div>
+
     <!-- 基本資料 -->
     <div>
       <label class="block">姓名：</label>
