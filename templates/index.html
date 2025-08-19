@@ -6,7 +6,6 @@
   <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
   <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
   <style>
-    /* ========= Brand & base ========= */
     :root{
       --brand:#2563eb; --brand-weak:#eff6ff;
       --bg:#f6f8fb; --card:#ffffff; --line:#e5e7eb;
@@ -23,8 +22,6 @@
     .muted{color:var(--muted)}
     .nowrap{white-space:nowrap}
     .right{text-align:right}
-
-    /* ========= Header / Navbar ========= */
     .topbar{background:linear-gradient(180deg, rgba(37,99,235,.08), rgba(37,99,235,0) 65%)}
     .nav{display:flex;align-items:center;gap:12px;padding:14px 0;flex-wrap:wrap}
     .brand{display:flex;align-items:center;gap:10px}
@@ -35,18 +32,12 @@
     .btn:hover{background:#f9fafb}
     .btn-primary{color:var(--brand);border-color:var(--brand);background:var(--brand-weak)}
     .spacer{flex:1}
-
-    /* ========= KPI Cards ========= */
     .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:8px}
     .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
     .kpi-title{font-size:.85rem;color:var(--muted)}
     .kpi-value{font-size:1.35rem;font-weight:800}
-
-    /* ========= Tools ========= */
     .toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:14px 0}
-    .input{border:1px solid var(--line);border-radius:10px;padding:.48rem .6rem;min-width:260px;background:#fff}
-
-    /* ========= Table ========= */
+    .input{border:1px solid var(--line);border-radius:10px;padding:.48rem .6rem;min-width:220px;background:#fff}
     .table-wrap{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
     .scroll-x{overflow-x:auto}
     table{border-collapse:collapse;min-width:1100px;width:100%}
@@ -54,19 +45,13 @@
       text-align:left;padding:.6rem .75rem;white-space:nowrap;font-weight:700;letter-spacing:.2px}
     tbody td{border-top:1px solid var(--line);padding:.55rem .75rem;vertical-align:top}
     tbody tr:hover{background:#fcfcfd}
-
-    /* ========= Highlights ========= */
     .row-warn{background:#fffbeb}
     .row-danger{background:#fef2f2}
     .pill{display:inline-block;padding:2px 8px;border-radius:9999px;background:var(--pill);font-size:12px}
     .pill-ok{color:var(--ok)}
     .pill-warn{color:var(--warn);background:#fff7ed}
     .pill-danger{color:var(--danger);background:#fef2f2}
-
-    /* ========= Info note ========= */
     .note{font-size:.86rem;color:var(--muted)}
-
-    /* ========= Mobile ========= */
     @media (max-width:768px){
       .cards{grid-template-columns:1fr}
       .container{padding:14px}
@@ -77,9 +62,11 @@
 <body>
   <div class="topbar">
     <div class="container">
-      <!-- Logo / 導覽 -->
       <div class="nav">
-        <a class="brand" href="{{ url_for('index', store_id=current_store_id, all=request.args.get('all')) }}">
+        {# 目前分店（用 store_id，而不是 branch） #}
+        {% set current_store_id = request.args.get('store_id', type=int) %}
+        {% set current_all = request.args.get('all') %}
+        <a class="brand" href="{{ url_for('index', store_id=current_store_id, all=current_all) }}">
           <img
             src="{{ url_for('static', filename='logo.png') }}"
             alt="公司 Logo"
@@ -89,19 +76,11 @@
 
         <div class="text-2xl">員工特休總覽</div>
 
-        {# ===== 分店下拉（動態） ===== #}
-        {% set current_store_id = current_store_id %}
-        <select id="storeSelect" class="input" style="max-width:220px;margin-left:12px"
-          onchange="
-            (function(sel){
-              const u = new URL(window.location.href);
-              if(sel.value){ u.searchParams.set('store_id', sel.value); } else { u.searchParams.delete('store_id'); }
-              location.href = u.pathname + '?' + u.searchParams.toString();
-            })(this);
-          ">
+        <!-- 分店下拉（動態） -->
+        <select id="storeSelect" class="input" style="max-width:260px;margin-left:12px">
           <option value="" {% if not current_store_id %}selected{% endif %}>全部分店</option>
           {% for s in stores %}
-            <option value="{{ s[0] }}" {% if current_store_id==s[0] %}selected{% endif %}>{{ s[1] }}</option>
+            <option value="{{ s[0] }}" {% if current_store_id == s[0] %}selected{% endif %}>{{ s[1] }}</option>
           {% endfor %}
         </select>
 
@@ -109,7 +88,7 @@
           <a class="btn" href="{{ url_for('index', store_id=current_store_id, all=('0' if show_all else '1')) }}">
             {{ '顯示在職員工' if show_all else '顯示所有員工（含離職）' }}
           </a>
-          <a class="btn" href="{{ url_for('branch_management') }}?store_id={{ current_store_id or '' }}">分店管理</a>
+          <a class="btn" href="{{ url_for('branch_management') }}">分店管理</a>
           <a class="btn" href="{{ url_for('list_insurance') }}?store_id={{ current_store_id or '' }}">保險負擔</a>
           <a class="btn" href="{{ url_for('add_employee') }}?store_id={{ current_store_id or '' }}">新增員工</a>
           <a class="btn btn-primary" href="{{ url_for('leave_expiring') }}?store_id={{ current_store_id or '' }}">特休即將到期</a>
@@ -129,9 +108,7 @@
           <div class="kpi-title">特休到期（提醒視窗）</div>
           <div class="kpi-value" id="leave-expiry-count">—</div>
           <div class="note" id="leave-expiry-window"></div>
-          <div style="margin-top:6px">
-            <a href="{{ url_for('leave_expiring') }}?store_id={{ current_store_id or '' }}">查看到期名單 →</a>
-          </div>
+          <div style="margin-top:6px"><a href="{{ url_for('leave_expiring') }}?store_id={{ current_store_id or '' }}">查看到期名單 →</a></div>
         </div>
         <div class="card">
           <div class="kpi-title">在職人數</div>
@@ -306,12 +283,22 @@
       exportBtn?.addEventListener('click', exportCsv);
       applyFilter();
 
+      // 分店切換：改變 URL 的 store_id 參數並保留 all 參數
+      const select = document.getElementById('storeSelect');
+      select?.addEventListener('change', () => {
+        const params = new URLSearchParams(window.location.search);
+        if (select.value) params.set('store_id', select.value); else params.delete('store_id');
+        // 保留 all 參數（顯示全部/在職）
+        const url = '{{ url_for("index") }}' + (params.toString() ? ('?' + params.toString()) : '');
+        window.location.href = url;
+      });
+
       // 到期提醒 KPI（帶上 store_id）
       const params = new URLSearchParams(location.search);
-      const storeId = params.get('store_id') || '';
+      const sid = params.get('store_id') || '';
       const countEl = document.getElementById('leave-expiry-count');
       const winEl = document.getElementById('leave-expiry-window');
-      fetch('{{ url_for("leave_expiring_json") }}' + (storeId ? ('?store_id=' + encodeURIComponent(storeId)) : ''))
+      fetch('{{ url_for("leave_expiring_json") }}' + (sid ? ('?store_id=' + encodeURIComponent(sid)) : ''))
         .then(r => r.json())
         .then(d => {
           countEl.textContent = d.count + ' 人';
