@@ -1,4 +1,86 @@
-body { font-family: Arial, sans-serif; }
-table { width: 100%; border-collapse: collapse; }
-th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
-a { text-decoration: none; }
+/* ====== 全域設定 ====== */
+body {
+  font-family: "Microsoft JhengHei", "PingFang TC", Arial, sans-serif;
+  background-color: #f9fafb;
+  color: #333;
+  margin: 0;
+  padding: 0;
+}
+
+/* ====== 頁首 Header ====== */
+.header {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+  background: #1e3a8a; /* 主色：深藍 */
+  color: white;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.header img {
+  height: 40px;
+  margin-right: 12px;
+}
+
+.header h1 {
+  font-size: 20px;
+  margin: 0;
+}
+
+/* ====== 表格樣式 ====== */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+
+table th {
+  background: #3b82f6; /* 藍色表頭 */
+  color: white;
+  padding: 10px;
+  text-align: left;
+  font-weight: bold;
+}
+
+table td {
+  padding: 10px;
+  border-bottom: 1px solid #ddd;
+}
+
+table tr:nth-child(even) {
+  background: #f1f5f9; /* 偶數列淺灰背景 */
+}
+
+/* ====== 按鈕樣式 ====== */
+button, .btn {
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+button:hover, .btn:hover {
+  background: #1e40af;
+}
+
+/* ====== 搜尋框 ====== */
+input[type="text"], input[type="date"], select {
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+input[type="text"]:focus, input[type="date"]:focus {
+  border-color: #2563eb;
+  outline: none;
+  box-shadow: 0 0 4px rgba(37, 99, 235, 0.4);
+}
