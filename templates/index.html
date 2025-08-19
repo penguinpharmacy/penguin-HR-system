@@ -8,15 +8,10 @@
   <style>
     /* ========= Brand & base ========= */
     :root{
-      --brand:#2563eb;          /* ← 品牌主色：改這裡就改全站色 */
-      --brand-weak:#eff6ff;
-      --bg:#f6f8fb;
-      --card:#ffffff;
-      --line:#e5e7eb;
-      --text:#0f172a;
-      --muted:#64748b;
-      --ok:#16a34a; --warn:#f59e0b; --danger:#dc2626;
-      --pill:#f1f5f9;
+      --brand:#2563eb; --brand-weak:#eff6ff;
+      --bg:#f6f8fb; --card:#ffffff; --line:#e5e7eb;
+      --text:#0f172a; --muted:#64748b;
+      --ok:#16a34a; --warn:#f59e0b; --danger:#dc2626; --pill:#f1f5f9;
     }
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--text);
@@ -31,7 +26,7 @@
 
     /* ========= Header / Navbar ========= */
     .topbar{background:linear-gradient(180deg, rgba(37,99,235,.08), rgba(37,99,235,0) 65%)}
-    .nav{display:flex;align-items:center;gap:12px;padding:14px 0}
+    .nav{display:flex;align-items:center;gap:12px;padding:14px 0;flex-wrap:wrap}
     .brand{display:flex;align-items:center;gap:10px}
     .brand img{height:32px;width:auto;display:block}
     .brand .name{font-weight:800;letter-spacing:.5px}
@@ -75,7 +70,7 @@
     @media (max-width:768px){
       .cards{grid-template-columns:1fr}
       .container{padding:14px}
-      .brand .name{display:none} /* 小螢幕僅顯示 Logo */
+      .brand .name{display:none}
     }
   </style>
 </head>
@@ -84,8 +79,7 @@
     <div class="container">
       <!-- Logo / 導覽 -->
       <div class="nav">
-        <a class="brand" href="/">
-          <!-- 使用 url_for 正確取靜態檔；失敗就顯示備用文字 -->
+        <a class="brand" href="{{ url_for('index', branch=request.args.get('branch','all'), all=request.args.get('all')) }}">
           <img
             src="{{ url_for('static', filename='logo.png') }}"
             alt="公司 Logo"
@@ -95,13 +89,23 @@
 
         <div class="text-2xl">員工特休總覽</div>
 
+        <!-- 分店下拉：切換會保留 all 參數 -->
+        {% set current_branch = request.args.get('branch','all') %}
+        {% set current_all = request.args.get('all') %}
+        <select id="branchSelect" class="input" style="max-width:220px;margin-left:12px"
+          onchange="location.href='{{ url_for('index') }}?branch='+this.value{{ ' + \"&all='+current_all+'\"' if current_all else '' }}">
+          <option value="all" {% if current_branch=='all' %}selected{% endif %}>全部分店</option>
+          <option value="penguin-pharmacy" {% if current_branch=='penguin-pharmacy' %}selected{% endif %}>企鵝藥局</option>
+          <option value="penguin-health" {% if current_branch=='penguin-health' %}selected{% endif %}>企鵝藥妝</option>
+        </select>
+
         <div class="nav-links">
-          <a class="btn" href="/?all={{ '0' if show_all else '1' }}">
+          <a class="btn" href="{{ url_for('index', branch=current_branch, all=('0' if show_all else '1')) }}">
             {{ '顯示在職員工' if show_all else '顯示所有員工（含離職）' }}
           </a>
-          <a class="btn" href="{{ url_for('list_insurance') }}">保險負擔</a>
-          <a class="btn" href="{{ url_for('add_employee') }}">新增員工</a>
-          <a class="btn btn-primary" href="{{ url_for('leave_expiring') }}">特休即將到期</a>
+          <a class="btn" href="{{ url_for('list_insurance') }}?branch={{ current_branch }}">保險負擔</a>
+          <a class="btn" href="{{ url_for('add_employee') }}?branch={{ current_branch }}">新增員工</a>
+          <a class="btn btn-primary" href="{{ url_for('leave_expiring') }}?branch={{ current_branch }}">特休即將到期</a>
         </div>
 
         <span class="spacer"></span>
@@ -118,7 +122,7 @@
           <div class="kpi-title">特休到期（提醒視窗）</div>
           <div class="kpi-value" id="leave-expiry-count">—</div>
           <div class="note" id="leave-expiry-window"></div>
-          <div style="margin-top:6px"><a href="{{ url_for('leave_expiring') }}">查看到期名單 →</a></div>
+          <div style="margin-top:6px"><a href="{{ url_for('leave_expiring') }}?branch={{ current_branch }}">查看到期名單 →</a></div>
         </div>
         <div class="card">
           <div class="kpi-title">在職人數</div>
@@ -174,7 +178,7 @@
             <td class="nowrap">{{ e.start_date }}</td>
             <td class="nowrap">{{ e.end_date }}</td>
             <td>
-              <a href="{{ url_for('salary_detail', emp_id=e.id) }}">{{ e.salary_grade }}</a>
+              <a href="{{ url_for('salary_detail', emp_id=e.id) }}?branch={{ current_branch }}">{{ e.salary_grade }}</a>
             </td>
             <td data-col="level">{{ e.job_level }}</td>
             <td class="right">{{ e.base_salary }}</td>
@@ -182,25 +186,25 @@
             <td class="nowrap">{{ e.years }} 年 {{ e.months }} 月</td>
             <td class="right">{{ e.entitled }}</td>
             <td class="right">
-              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='特休') }}">{{ e.used }}</a>
+              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='特休') }}?branch={{ current_branch }}">{{ e.used }}</a>
             </td>
             <td class="right">
-              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='特休') }}">{{ e.remaining }}</a>
+              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='特休') }}?branch={{ current_branch }}">{{ e.remaining }}</a>
             </td>
             <td>
-              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='病假') }}">
+              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='病假') }}?branch={{ current_branch }}">
                 {% set v = '%.1f'|format(e.remaining_sick) %}
                 <span class="pill {% if e.remaining_sick<=2 %}pill-danger{% elif e.remaining_sick<=5 %}pill-warn{% else %}pill-ok{% endif %}">{{ v }} 天</span>
               </a>
             </td>
             <td>
-              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='事假') }}">
+              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='事假') }}?branch={{ current_branch }}">
                 {% set v = '%.1f'|format(e.remaining_personal) %}
                 <span class="pill {% if e.remaining_personal<=2 %}pill-danger{% elif e.remaining_personal<=5 %}pill-warn{% else %}pill-ok{% endif %}">{{ v }} 天</span>
               </a>
             </td>
             <td>
-              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='婚假') }}">
+              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='婚假') }}?branch={{ current_branch }}">
                 {% set v = '%.1f'|format(e.remaining_marriage) %}
                 <span class="pill {% if e.remaining_marriage<=2 %}pill-danger{% elif e.remaining_marriage<=5 %}pill-warn{% else %}pill-ok{% endif %}">{{ v }} 天</span>
               </a>
@@ -208,12 +212,12 @@
             <td>{{ '是' if e.suspend else '否' }}</td>
             <td class="nowrap">
               {% if e.is_active %}
-                <a href="{{ url_for('edit_employee', emp_id=e.id) }}">編輯</a>
-                <a href="{{ url_for('list_insurance') }}" class="muted" title="前往保險列表" style="margin-left:8px">保險</a>
-                <a href="{{ url_for('delete_employee', emp_id=e.id) }}" style="margin-left:8px;color:var(--danger)" onclick="return confirm('確定要封存此員工？');">刪除</a>
+                <a href="{{ url_for('edit_employee', emp_id=e.id) }}?branch={{ current_branch }}">編輯</a>
+                <a href="{{ url_for('list_insurance') }}?branch={{ current_branch }}" class="muted" title="前往保險列表" style="margin-left:8px">保險</a>
+                <a href="{{ url_for('delete_employee', emp_id=e.id) }}?branch={{ current_branch }}" style="margin-left:8px;color:var(--danger)" onclick="return confirm('確定要封存此員工？');">刪除</a>
               {% else %}
                 <span class="muted">已離職</span>
-                <a href="{{ url_for('restore_employee', emp_id=e.id) }}" style="margin-left:8px">復職</a>
+                <a href="{{ url_for('restore_employee', emp_id=e.id) }}?branch={{ current_branch }}" style="margin-left:8px">復職</a>
               {% endif %}
             </td>
           </tr>
@@ -293,10 +297,11 @@
       exportBtn?.addEventListener('click', exportCsv);
       applyFilter();
 
-      // 到期提醒 KPI
+      // 到期提醒 KPI（帶上 branch）
+      const currentBranch = new URLSearchParams(location.search).get('branch') || 'all';
       const countEl = document.getElementById('leave-expiry-count');
       const winEl = document.getElementById('leave-expiry-window');
-      fetch('{{ url_for("leave_expiring_json") }}')
+      fetch('{{ url_for("leave_expiring_json") }}?branch=' + encodeURIComponent(currentBranch))
         .then(r => r.json())
         .then(d => {
           countEl.textContent = d.count + ' 人';
