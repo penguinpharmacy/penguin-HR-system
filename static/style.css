@@ -1,86 +1,78 @@
 /* ====== 全域設定 ====== */
-body {
-  font-family: "Microsoft JhengHei", "PingFang TC", Arial, sans-serif;
-  background-color: #f9fafb;
-  color: #333;
-  margin: 0;
-  padding: 0;
+:root{
+  --brand:#2563eb;          /* 品牌主色（改這裡就能換全站色） */
+  --brand-strong:#1e40af;   /* 深一階 */
+  --bg:#f6f8fb;
+  --card:#ffffff;
+  --line:#e5e7eb;
+  --text:#0f172a;
+  --muted:#64748b;
 }
 
-/* ====== 頁首 Header ====== */
-.header {
-  display: flex;
-  align-items: center;
-  padding: 12px 20px;
-  background: #1e3a8a; /* 主色：深藍 */
-  color: white;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC","Helvetica Neue",Arial,"PingFang TC","Microsoft JhengHei",sans-serif;
 }
+a{color:var(--brand); text-decoration:none}
+a:hover{text-decoration:underline}
 
-.header img {
-  height: 40px;
-  margin-right: 12px;
+/* ====== Header（可共用到其他頁） ====== */
+.header{
+  display:flex; align-items:center; gap:12px;
+  padding:12px 20px; background:var(--brand);
+  color:#fff; box-shadow:0 2px 6px rgba(0,0,0,.08);
 }
+.header img{height:40px; width:auto; display:block}
+.header h1{margin:0; font-size:18px; font-weight:800; letter-spacing:.3px}
 
-.header h1 {
-  font-size: 20px;
-  margin: 0;
+/* ====== 容器、工具列 ====== */
+.container{max-width:1200px; margin:0 auto; padding:20px}
+.card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px}
+.toolbar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:14px 0}
+
+.input{
+  border:1px solid var(--line); border-radius:10px; padding:.48rem .6rem;
+  min-width:260px; background:#fff; font-size:14px;
 }
+.input:focus{outline:none; border-color:var(--brand); box-shadow:0 0 0 3px rgba(37,99,235,.15)}
 
-/* ====== 表格樣式 ====== */
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 20px;
-  background: white;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+/* ====== 按鈕 ====== */
+.btn{
+  display:inline-block; border:1px solid var(--line); background:#fff;
+  border-radius:10px; padding:.45rem .7rem; font-size:14px; cursor:pointer;
 }
+.btn:hover{background:#f9fafb}
+.btn-primary{color:var(--brand); border-color:var(--brand); background:#eff6ff}
+.btn-primary:hover{background:#e0ecff}
 
-table th {
-  background: #3b82f6; /* 藍色表頭 */
-  color: white;
-  padding: 10px;
-  text-align: left;
-  font-weight: bold;
+/* ====== 表格 ====== */
+.table-wrap{background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden}
+.scroll-x{overflow-x:auto}
+table{border-collapse:collapse; min-width:1100px; width:100%}
+thead th{
+  position:sticky; top:0; background:#f9fafb; border-bottom:1px solid var(--line);
+  text-align:left; padding:.6rem .75rem; white-space:nowrap; font-weight:700; letter-spacing:.2px;
 }
+tbody td{border-top:1px solid var(--line); padding:.55rem .75rem; vertical-align:top}
+tbody tr:hover{background:#fcfcfd}
+.right{text-align:right}
+.nowrap{white-space:nowrap}
 
-table td {
-  padding: 10px;
-  border-bottom: 1px solid #ddd;
-}
+/* ====== 低餘額提醒（和 index.html 的 class 對應） ====== */
+.row-warn{background:#fffbeb}
+.row-danger{background:#fef2f2}
+.pill{display:inline-block; padding:2px 8px; border-radius:9999px; background:#f1f5f9; font-size:12px}
+.pill-ok{color:#16a34a}
+.pill-warn{color:#f59e0b; background:#fff7ed}
+.pill-danger{color:#dc2626; background:#fef2f2}
 
-table tr:nth-child(even) {
-  background: #f1f5f9; /* 偶數列淺灰背景 */
-}
+/* ====== 小字 ====== */
+.note{font-size:.86rem; color:var(--muted)}
 
-/* ====== 按鈕樣式 ====== */
-button, .btn {
-  background: #2563eb;
-  color: white;
-  border: none;
-  padding: 8px 14px;
-  border-radius: 6px;
-  cursor: pointer;
-  text-decoration: none;
-  font-size: 14px;
-}
-
-button:hover, .btn:hover {
-  background: #1e40af;
-}
-
-/* ====== 搜尋框 ====== */
-input[type="text"], input[type="date"], select {
-  padding: 6px 10px;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  font-size: 14px;
-}
-
-input[type="text"]:focus, input[type="date"]:focus {
-  border-color: #2563eb;
-  outline: none;
-  box-shadow: 0 0 4px rgba(37, 99, 235, 0.4);
+/* ====== RWD ====== */
+@media (max-width:768px){
+  .container{padding:14px}
+  .header h1{font-size:16px}
 }
