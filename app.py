@@ -45,7 +45,7 @@ def _guard():
     if not ADMIN_USER or not ADMIN_PASS:
         g.current_user = 'dev'
         return
-    # 靜態與健康檢查不擋
+    # 靜態不擋
     if request.endpoint in ('static',):
         return
     auth = request.headers.get('Authorization') or ''
@@ -188,17 +188,29 @@ def days_until(target: date, today: date) -> int:
     return (target - today).days
 
 # -------------------------
-# 資料表初始化/升級（含分店、審核欄位、審計表）
+# 資料表初始化/升級（含分店、部門、審核欄位、審計表）
 # -------------------------
 def init_db():
     with get_conn() as conn, conn.cursor() as c:
-        # ========== stores（分店） ==========
+        # ========== stores（分店 / 企業單位） ==========
         c.execute('''
             CREATE TABLE IF NOT EXISTS stores (
               id SERIAL PRIMARY KEY,
               name TEXT UNIQUE NOT NULL,
               short_code TEXT UNIQUE,
               is_active BOOLEAN DEFAULT TRUE
+            );
+        ''')
+        conn.commit()
+
+        # ========== store_departments（每個分店的部門清單） ==========
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS store_departments (
+              id SERIAL PRIMARY KEY,
+              store_id INTEGER REFERENCES stores(id),
+              name TEXT NOT NULL,
+              is_active BOOLEAN DEFAULT TRUE,
+              UNIQUE(store_id, name)
             );
         ''')
         conn.commit()
@@ -323,6 +335,16 @@ def init_db():
             c.execute("INSERT INTO stores (name, short_code) VALUES (%s,%s)", ('企鵝藥局', 'PHARM'))
             c.execute("INSERT INTO stores (name, short_code) VALUES (%s,%s)", ('企鵝藥妝', 'DRUGS'))
             conn.commit()
+            # 預設部門
+            c.execute("SELECT id FROM stores WHERE name=%s", ('企鵝藥局',))
+            sid1 = c.fetchone()[0]
+            c.execute("SELECT id FROM stores WHERE name=%s", ('企鵝藥妝',))
+            sid2 = c.fetchone()[0]
+            for sid in (sid1, sid2):
+                c.execute("INSERT INTO store_departments (store_id, name) VALUES (%s,%s) ON CONFLICT DO NOTHING", (sid, '門市'))
+                c.execute("INSERT INTO store_departments (store_id, name) VALUES (%s,%s) ON CONFLICT DO NOTHING", (sid, '行政'))
+                c.execute("INSERT INTO store_departments (store_id, name) VALUES (%s,%s) ON CONFLICT DO NOTHING", (sid, '倉儲'))
+            conn.commit()
 
 # === Audit Log 寫入小工具 ===
 def write_audit(conn, table, row_id, action, before_obj=None, after_obj=None, acted_by=None):
@@ -441,12 +463,11 @@ def index():
         adj        = float(adj_hours or 0)
         ent_h      = max(ent_h_base + adj, 0.0)
 
-        # 依紀錄動態計算（只計 approved）
+        # 動態計算（只計 approved）
         u = usage_map.get(sid, {})
         sick_used_hours     = float(u.get('病假', 0.0))
         personal_used_hours = float(u.get('事假', 0.0))
         marriage_used_hours = float(u.get('婚假', 0.0))
-        # 要讓特休已用也跟著紀錄？可改為：used_h = float(u.get('特休', used_h))
 
         # 以天呈現病/事/婚
         sick_ent_days      = int(sick_ent or 0)
@@ -522,7 +543,188 @@ def index():
                            page_size=page_size)
 
 # -------------------------
-# 新增員工（支援調整值；暫未加入 store_id 表單，之後可加）
+# 分店管理（列表 + 新增/編輯/啟用）
+# -------------------------
+@app.get('/stores')
+def store_list():
+    init_db()
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute("""
+          SELECT s.id, s.name, s.short_code, s.is_active,
+                 COALESCE(cnt.cnt,0)
+            FROM stores s
+            LEFT JOIN (
+              SELECT store_id, COUNT(*) AS cnt
+                FROM employees
+               GROUP BY store_id
+            ) cnt ON cnt.store_id = s.id
+           ORDER BY s.id
+        """)
+        rows = c.fetchall()
+    # 簡易頁面（用 template 會更漂亮，先用最小可用）
+    html = ["<h1>分店管理</h1>", '<a href="/">← 返回</a><br><br>']
+    html.append("""
+    <form method="post" action="/stores/add" style="margin-bottom:16px">
+      名稱：<input name="name" required>
+      短代碼：<input name="short_code" placeholder="可留空">
+      <button type="submit">新增</button>
+    </form>
+    """)
+    html.append("<table border=1 cellpadding=6><tr><th>ID</th><th>名稱</th><th>代碼</th><th>在職人數</th><th>啟用</th><th>操作</th></tr>")
+    for sid, name, code, active, cnt in rows:
+        html.append(f"""
+          <tr>
+            <td>{sid}</td>
+            <td>{name}</td>
+            <td>{code or ''}</td>
+            <td>{cnt}</td>
+            <td>{"是" if active else "否"}</td>
+            <td>
+              <form method="post" action="/stores/{sid}/edit" style="display:inline">
+                名稱 <input name="name" value="{name}" required>
+                代碼 <input name="short_code" value="{code or ''}">
+                <button type="submit">儲存</button>
+              </form>
+              <form method="post" action="/stores/{sid}/toggle" style="display:inline;margin-left:8px">
+                <button type="submit">{'停用' if active else '啟用'}</button>
+              </form>
+              <a href="/stores/{sid}/departments" style="margin-left:8px">部門管理</a>
+            </td>
+          </tr>
+        """)
+    html.append("</table>")
+    return "\n".join(html)
+
+@app.post('/stores/add')
+def store_add():
+    init_db()
+    name = request.form.get('name','').strip()
+    code = (request.form.get('short_code') or '').strip() or None
+    if not name:
+        return abort(400, 'name required')
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute("INSERT INTO stores (name, short_code) VALUES (%s,%s) RETURNING id", (name, code))
+        sid = c.fetchone()[0]
+        conn.commit()
+        write_audit(conn, 'stores', sid, 'insert', None, {'name': name, 'short_code': code})
+    return redirect(url_for('store_list'))
+
+@app.post('/stores/<int:store_id>/edit')
+def store_edit(store_id):
+    init_db()
+    name = request.form.get('name','').strip()
+    code = (request.form.get('short_code') or '').strip() or None
+    if not name:
+        return abort(400, 'name required')
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute("SELECT name, short_code FROM stores WHERE id=%s", (store_id,))
+        before = c.fetchone() or ('','')
+        c.execute("UPDATE stores SET name=%s, short_code=%s WHERE id=%s", (name, code, store_id))
+        conn.commit()
+        write_audit(conn, 'stores', store_id, 'update',
+                    {'name': before[0], 'short_code': before[1]},
+                    {'name': name, 'short_code': code})
+    return redirect(url_for('store_list'))
+
+@app.post('/stores/<int:store_id>/toggle')
+def store_toggle(store_id):
+    init_db()
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute("SELECT is_active FROM stores WHERE id=%s", (store_id,))
+        row = c.fetchone()
+        if not row:
+            return abort(404)
+        newv = not bool(row[0])
+        c.execute("UPDATE stores SET is_active=%s WHERE id=%s", (newv, store_id))
+        conn.commit()
+        write_audit(conn, 'stores', store_id, 'update', {'is_active': not newv}, {'is_active': newv})
+    return redirect(url_for('store_list'))
+
+# -------------------------
+# 分店部門管理（簡易頁面 + API）
+# -------------------------
+@app.get('/stores/<int:store_id>/departments')
+def dept_page(store_id):
+    init_db()
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute("SELECT id, name FROM stores WHERE id=%s", (store_id,))
+        srow = c.fetchone()
+        if not srow:
+            return abort(404)
+        sname = srow[1]
+        c.execute("SELECT id, name, is_active FROM store_departments WHERE store_id=%s ORDER BY id", (store_id,))
+        rows = c.fetchall()
+    html = [f"<h1>部門管理 — {sname}</h1>", '<a href="/stores">← 返回分店</a><br><br>']
+    html.append(f"""
+    <form method="post" action="/api/stores/{store_id}/departments" style="margin-bottom:16px">
+      新增部門：<input name="name" required>
+      <button type="submit">新增</button>
+    </form>
+    """)
+    html.append("<table border=1 cellpadding=6><tr><th>ID</th><th>名稱</th><th>啟用</th><th>操作</th></tr>")
+    for did, name, active in rows:
+        html.append(f"""
+          <tr>
+            <td>{did}</td>
+            <td>{name}</td>
+            <td>{"是" if active else "否"}</td>
+            <td>
+              <form method="post" action="/api/stores/{store_id}/departments/{did}/toggle">
+                <button type="submit">{'停用' if active else '啟用'}</button>
+              </form>
+            </td>
+          </tr>
+        """)
+    html.append("</table>")
+    return "\n".join(html)
+
+@app.get('/api/stores')
+def api_stores():
+    init_db()
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute("SELECT id, name FROM stores WHERE COALESCE(is_active, TRUE)=TRUE ORDER BY id")
+        rows = [{'id': r[0], 'name': r[1]} for r in c.fetchall()]
+    return jsonify(rows)
+
+@app.get('/api/stores/<int:store_id>/departments')
+def api_store_departments(store_id):
+    init_db()
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute("SELECT id, name FROM store_departments WHERE store_id=%s AND COALESCE(is_active,TRUE)=TRUE ORDER BY id", (store_id,))
+        rows = [{'id': r[0], 'name': r[1]} for r in c.fetchall()]
+    return jsonify(rows)
+
+@app.post('/api/stores/<int:store_id>/departments')
+def api_store_departments_add(store_id):
+    init_db()
+    name = (request.form.get('name') or request.json.get('name') if request.is_json else '').strip()
+    if not name:
+        return abort(400, 'name required')
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute("INSERT INTO store_departments (store_id, name) VALUES (%s,%s) ON CONFLICT DO NOTHING RETURNING id", (store_id, name))
+        row = c.fetchone()
+        if row:
+            did = row[0]
+            conn.commit()
+            write_audit(conn, 'store_departments', did, 'insert', None, {'store_id': store_id, 'name': name})
+    return redirect(url_for('dept_page', store_id=store_id))
+
+@app.post('/api/stores/<int:store_id>/departments/<int:dep_id>/toggle')
+def api_store_departments_toggle(store_id, dep_id):
+    init_db()
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute("SELECT is_active FROM store_departments WHERE id=%s AND store_id=%s", (dep_id, store_id))
+        row = c.fetchone()
+        if not row:
+            return abort(404)
+        newv = not bool(row[0])
+        c.execute("UPDATE store_departments SET is_active=%s WHERE id=%s", (newv, dep_id))
+        conn.commit()
+        write_audit(conn, 'store_departments', dep_id, 'update', {'is_active': not newv}, {'is_active': newv})
+    return redirect(url_for('dept_page', store_id=store_id))
+
+# -------------------------
+# 新增員工（支援調整值 + 分店）
 # -------------------------
 @app.route('/add', methods=['GET','POST'])
 def add_employee():
@@ -537,7 +739,7 @@ def add_employee():
         base       = int(request.form.get('base_salary') or 0)
         allowance  = int(request.form.get('position_allowance') or 0)
         suspend    = bool(request.form.get('suspend'))
-        store_id_s = request.form.get('store_id')  # 若你表單加了分店下拉
+        store_id_s = request.form.get('store_id')  # 新：分店下拉
         store_id   = int(store_id_s) if store_id_s else None
 
         sd_date = datetime.strptime(start_date, '%Y-%m-%d').date()
@@ -593,7 +795,7 @@ def add_employee():
             ))
             conn.commit()
         return redirect(url_for('index'))
-    # 分店清單供表單下拉（若你要加）
+    # 分店清單供表單下拉
     with get_conn() as conn, conn.cursor() as c:
         c.execute("SELECT id, name FROM stores WHERE COALESCE(is_active, TRUE)=TRUE ORDER BY id")
         stores = c.fetchall()
@@ -1208,7 +1410,7 @@ def admin_backup():
     if BACKUP_TOKEN and request.args.get('token') != BACKUP_TOKEN:
         return abort(403)
 
-    tables = ['stores', 'employees', 'insurances', 'leave_records', 'audit_logs']
+    tables = ['stores', 'store_departments', 'employees', 'insurances', 'leave_records', 'audit_logs']
     buf = io.BytesIO()
     zf = zipfile.ZipFile(buf, mode='w', compression=zipfile.ZIP_DEFLATED)
 
