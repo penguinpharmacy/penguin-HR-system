@@ -31,6 +31,13 @@
     .btn:hover { background:#f9fafb; }
     .btn-primary { border-color:#2563eb; color:#2563eb; }
     .btn-primary:hover { background:#eff6ff; }
+
+    /* 新增：小卡片樣式 */
+    .card { border:1px solid #e5e7eb; border-radius:12px; padding:12px 14px; margin-bottom:12px; }
+    .muted { color:#6b7280; }
+    .badge { padding:2px 8px; border-radius:9999px; font-size:12px; }
+    .badge-red { background:#fee2e2; color:#b91c1c; }
+    .badge-yellow { background:#fef3c7; color:#92400e; }
   </style>
 </head>
 <body class="p-4">
@@ -44,6 +51,9 @@
     <a href="{{ url_for('list_insurance') }}" class="text-green-600 underline">保險負擔</a>
     <a href="{{ url_for('add_employee') }}" class="text-purple-600 underline">新增員工</a>
 
+    <!-- 新增：導覽入口 -->
+    <a href="{{ url_for('leave_expiring') }}" class="text-blue-600 underline">特休即將到期</a>
+
     <span class="text-gray-600 text-sm">
       目前顯示：
       {% if show_all %}
@@ -53,6 +63,20 @@
       {% endif %}
       ・共 <span id="rowCount">{{ employees|length }}</span> 人
     </span>
+  </div>
+
+  <!-- 新增：提醒卡片（自動抓 JSON 數字） -->
+  <div id="leave-expiry-card" class="card">
+    <div class="muted text-sm">特休到期提醒</div>
+    <div style="display:flex;align-items:baseline;gap:8px;">
+      <div id="leave-expiry-count" class="text-2xl">—</div>
+      <div id="leave-expiry-window" class="muted text-sm"></div>
+    </div>
+    <div class="mt-2">
+      <a href="{{ url_for('leave_expiring') }}" class="text-blue-600">查看到期名單 →</a>
+    </div>
+    <!-- 可選：顯示前三名 -->
+    <div id="leave-expiry-top3" class="mt-2 text-sm"></div>
   </div>
 
   <!-- 工具列：搜尋 + 匯出 CSV（只匯出目前畫面顯示的列） -->
@@ -244,6 +268,35 @@
 
       // 初次載入
       applyFilter();
+
+      // ===== 新增：抓取到期提醒數字 =====
+      const countEl = document.getElementById('leave-expiry-count');
+      const winEl = document.getElementById('leave-expiry-window');
+      const top3El = document.getElementById('leave-expiry-top3');
+
+      fetch('{{ url_for("leave_expiring_json") }}')
+        .then(r => r.json())
+        .then(d => {
+          countEl.textContent = d.count + ' 人';
+          winEl.textContent = `（${d.alert_within_days} 天內）`;
+
+          // 顯示前三名詳情（名稱／到期日／剩餘小時）
+          const top3 = (d.items || []).slice(0, 3);
+          if (top3.length) {
+            const items = top3.map(x => {
+              const badge = x.days_left <= 30 ? '<span class="badge badge-red">緊急</span>' : '';
+              const qty = x.remain_hours >= 40 ? '<span class="badge badge-yellow">偏多</span>' : '';
+              return `<div>• ${x.name} ｜ 到期：${x.expiry_date} ｜ 剩餘：${x.remain_hours} 小時 ${badge} ${qty}</div>`;
+            }).join('');
+            top3El.innerHTML = items;
+          } else {
+            top3El.textContent = '未來 ' + d.alert_within_days + ' 天內無到期';
+          }
+        })
+        .catch(() => {
+          countEl.textContent = '讀取失敗';
+        });
+      // ==================================
     })();
   </script>
 </body>
