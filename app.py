@@ -1313,6 +1313,142 @@ def leave_expiring():
     """
     return content
 
+# ====== 分店管理（branch_management） ======
+
+@app.get('/branches')
+def branch_management():
+    """分店管理：列出分店、快速新增/啟用關閉。"""
+    init_db()
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute("SELECT id, name, COALESCE(short_code,''), COALESCE(is_active, TRUE) FROM stores ORDER BY id;")
+        stores = c.fetchall()
+
+    # 簡單內嵌頁面，避免再建模板檔
+    rows_html = []
+    for sid, name, code, active in stores:
+        badge = '<span style="padding:2px 8px;border-radius:9999px;background:#ecfdf5;color:#065f46;font-size:12px">啟用</span>' \
+                if active else \
+                '<span style="padding:2px 8px;border-radius:9999px;background:#fef2f2;color:#991b1b;font-size:12px">關閉</span>'
+        rows_html.append(f"""
+        <tr>
+          <td class="px-2 py-1">{sid}</td>
+          <td class="px-2 py-1">{name}</td>
+          <td class="px-2 py-1">{code}</td>
+          <td class="px-2 py-1">{badge}</td>
+          <td class="px-2 py-1">
+            <form action="/branches/{sid}/toggle" method="post" style="display:inline">
+              <button type="submit" class="px-2 py-1" style="border:1px solid #e5e7eb;border-radius:8px;background:#fff">{'關閉' if active else '啟用'}</button>
+            </form>
+            <details style="display:inline-block;margin-left:8px">
+              <summary style="cursor:pointer;color:#2563eb">重新命名</summary>
+              <form action="/branches/{sid}/rename" method="post" style="margin-top:6px">
+                <input type="text" name="name" value="{name}" class="border px-2 py-1" required>
+                <input type="text" name="short_code" value="{code}" class="border px-2 py-1" placeholder="代碼（選填）">
+                <button type="submit" class="px-2 py-1" style="border:1px solid #e5e7eb;border-radius:8px;background:#fff">儲存</button>
+              </form>
+            </details>
+          </td>
+        </tr>
+        """)
+
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="zh-Hant">
+    <head>
+      <meta charset="utf-8">
+      <title>分店管理</title>
+      <link href="/static/style.css" rel="stylesheet">
+      <style>
+        body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans TC','Helvetica Neue',Arial,'PingFang TC','Microsoft JhengHei',sans-serif}}
+        .container{{max-width:960px;margin:0 auto;padding:20px}}
+        table{{width:100%;border-collapse:collapse}}
+        th,td{{border-bottom:1px solid #e5e7eb;text-align:left}}
+      </style>
+    </head>
+    <body class="p-4">
+      <div class="container">
+        <h1 class="text-2xl mb-4">分店管理</h1>
+
+        <form action="/branches/add" method="post" class="mb-4" style="margin-bottom:16px">
+          <b>新增分店：</b>
+          <input type="text" name="name" placeholder="分店名稱" class="border px-2 py-1" required>
+          <input type="text" name="short_code" placeholder="代碼（選填）" class="border px-2 py-1">
+          <button type="submit" class="px-3 py-1" style="border:1px solid #e5e7eb;border-radius:8px;background:#fff">新增</button>
+          <a href="{url_for('index')}" style="margin-left:10px;color:#2563eb">← 返回首頁</a>
+        </form>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th class="px-2 py-2">ID</th>
+                <th class="px-2 py-2">名稱</th>
+                <th class="px-2 py-2">代碼</th>
+                <th class="px-2 py-2">狀態</th>
+                <th class="px-2 py-2">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {''.join(rows_html) if rows_html else '<tr><td colspan="5" class="px-2 py-3" style="color:#6b7280">尚無分店</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </body>
+    </html>
+    """
+    return html
+
+@app.post('/branches/add')
+def add_branch():
+    init_db()
+    name = (request.form.get('name') or '').strip()
+    short_code = (request.form.get('short_code') or '').strip() or None
+    if not name:
+        return abort(400, description='名稱必填')
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute("INSERT INTO stores (name, short_code, is_active) VALUES (%s,%s,TRUE) RETURNING id;", (name, short_code))
+        new_id = c.fetchone()[0]
+        conn.commit()
+        write_audit(conn, 'stores', new_id, 'insert', None, {'name': name, 'short_code': short_code, 'is_active': True})
+    return redirect(url_for('branch_management'))
+
+@app.post('/branches/<int:store_id>/toggle')
+def toggle_branch(store_id: int):
+    init_db()
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute("SELECT is_active, name, COALESCE(short_code,'') FROM stores WHERE id=%s;", (store_id,))
+        row = c.fetchone()
+        if not row:
+            return abort(404)
+        active, name, code = row
+        before = {'name': name, 'short_code': code, 'is_active': bool(active)}
+        c.execute("UPDATE stores SET is_active = NOT COALESCE(is_active, TRUE) WHERE id=%s;", (store_id,))
+        conn.commit()
+        c.execute("SELECT is_active FROM stores WHERE id=%s;", (store_id,))
+        now_active = c.fetchone()[0]
+        write_audit(conn, 'stores', store_id, 'update', before, {'is_active': bool(now_active)})
+    return redirect(url_for('branch_management'))
+
+@app.post('/branches/<int:store_id>/rename')
+def rename_branch(store_id: int):
+    init_db()
+    name = (request.form.get('name') or '').strip()
+    short_code = (request.form.get('short_code') or '').strip() or None
+    if not name:
+        return abort(400, description='名稱必填')
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute("SELECT name, COALESCE(short_code,''), COALESCE(is_active,TRUE) FROM stores WHERE id=%s;", (store_id,))
+        row = c.fetchone()
+        if not row:
+            return abort(404)
+        before = {'name': row[0], 'short_code': row[1], 'is_active': bool(row[2])}
+        c.execute("UPDATE stores SET name=%s, short_code=%s WHERE id=%s;", (name, short_code, store_id))
+        conn.commit()
+        write_audit(conn, 'stores', store_id, 'update', before, {'name': name, 'short_code': short_code})
+    return redirect(url_for('branch_management'))
+
+
 @app.route('/alerts/leave-expiring/json')
 def leave_expiring_json():
     init_db()
