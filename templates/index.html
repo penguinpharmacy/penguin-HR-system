@@ -63,10 +63,9 @@
   <div class="topbar">
     <div class="container">
       <div class="nav">
-        {# 目前分店（用 store_id，而不是 branch） #}
-        {% set current_store_id = request.args.get('store_id', type=int) %}
-        {% set current_all = request.args.get('all') %}
-        <a class="brand" href="{{ url_for('index', store_id=current_store_id, all=current_all) }}">
+        {# 直接使用後端傳進來的 current_store_id #}
+        {% set sid = current_store_id %}
+        <a class="brand" href="{{ url_for('index', store_id=sid, all=request.args.get('all')) }}">
           <img
             src="{{ url_for('static', filename='logo.png') }}"
             alt="公司 Logo"
@@ -78,20 +77,20 @@
 
         <!-- 分店下拉（動態） -->
         <select id="storeSelect" class="input" style="max-width:260px;margin-left:12px">
-          <option value="" {% if not current_store_id %}selected{% endif %}>全部分店</option>
+          <option value="" {% if not sid %}selected{% endif %}>全部分店</option>
           {% for s in stores %}
-            <option value="{{ s[0] }}" {% if current_store_id == s[0] %}selected{% endif %}>{{ s[1] }}</option>
+            <option value="{{ s[0] }}" {% if sid == s[0] %}selected{% endif %}>{{ s[1] }}</option>
           {% endfor %}
         </select>
 
         <div class="nav-links">
-          <a class="btn" href="{{ url_for('index', store_id=current_store_id, all=('0' if show_all else '1')) }}">
+          <a class="btn" href="{{ url_for('index', store_id=sid, all=('0' if show_all else '1')) }}">
             {{ '顯示在職員工' if show_all else '顯示所有員工（含離職）' }}
           </a>
           <a class="btn" href="{{ url_for('branch_management') }}">分店管理</a>
-          <a class="btn" href="{{ url_for('list_insurance') }}?store_id={{ current_store_id or '' }}">保險負擔</a>
-          <a class="btn" href="{{ url_for('add_employee') }}?store_id={{ current_store_id or '' }}">新增員工</a>
-          <a class="btn btn-primary" href="{{ url_for('leave_expiring') }}?store_id={{ current_store_id or '' }}">特休即將到期</a>
+          <a class="btn" href="{{ url_for('list_insurance') }}?store_id={{ sid or '' }}">保險負擔</a>
+          <a class="btn" href="{{ url_for('add_employee') }}?store_id={{ sid or '' }}">新增員工</a>
+          <a class="btn btn-primary" href="{{ url_for('leave_expiring') }}?store_id={{ sid or '' }}">特休即將到期</a>
         </div>
 
         <span class="spacer"></span>
@@ -108,7 +107,7 @@
           <div class="kpi-title">特休到期（提醒視窗）</div>
           <div class="kpi-value" id="leave-expiry-count">—</div>
           <div class="note" id="leave-expiry-window"></div>
-          <div style="margin-top:6px"><a href="{{ url_for('leave_expiring') }}?store_id={{ current_store_id or '' }}">查看到期名單 →</a></div>
+          <div style="margin-top:6px"><a href="{{ url_for('leave_expiring') }}?store_id={{ sid or '' }}">查看到期名單 →</a></div>
         </div>
         <div class="card">
           <div class="kpi-title">在職人數</div>
@@ -164,7 +163,7 @@
             <td class="nowrap">{{ e.start_date }}</td>
             <td class="nowrap">{{ e.end_date }}</td>
             <td>
-              <a href="{{ url_for('salary_detail', emp_id=e.id) }}?store_id={{ current_store_id or '' }}">{{ e.salary_grade }}</a>
+              <a href="{{ url_for('salary_detail', emp_id=e.id) }}?store_id={{ sid or '' }}">{{ e.salary_grade }}</a>
             </td>
             <td data-col="level">{{ e.job_level }}</td>
             <td class="right">{{ e.base_salary }}</td>
@@ -172,25 +171,25 @@
             <td class="nowrap">{{ e.years }} 年 {{ e.months }} 月</td>
             <td class="right">{{ e.entitled }}</td>
             <td class="right">
-              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='特休') }}?store_id={{ current_store_id or '' }}">{{ e.used }}</a>
+              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='特休') }}?store_id={{ sid or '' }}">{{ e.used }}</a>
             </td>
             <td class="right">
-              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='特休') }}?store_id={{ current_store_id or '' }}">{{ e.remaining }}</a>
+              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='特休') }}?store_id={{ sid or '' }}">{{ e.remaining }}</a>
             </td>
             <td>
-              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='病假') }}?store_id={{ current_store_id or '' }}">
+              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='病假') }}?store_id={{ sid or '' }}">
                 {% set v = '%.1f'|format(e.remaining_sick) %}
                 <span class="pill {% if e.remaining_sick<=2 %}pill-danger{% elif e.remaining_sick<=5 %}pill-warn{% else %}pill-ok{% endif %}">{{ v }} 天</span>
               </a>
             </td>
             <td>
-              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='事假') }}?store_id={{ current_store_id or '' }}">
+              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='事假') }}?store_id={{ sid or '' }}">
                 {% set v = '%.1f'|format(e.remaining_personal) %}
                 <span class="pill {% if e.remaining_personal<=2 %}pill-danger{% elif e.remaining_personal<=5 %}pill-warn{% else %}pill-ok{% endif %}">{{ v }} 天</span>
               </a>
             </td>
             <td>
-              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='婚假') }}?store_id={{ current_store_id or '' }}">
+              <a href="{{ url_for('leave_history', emp_id=e.id, leave_type='婚假') }}?store_id={{ sid or '' }}">
                 {% set v = '%.1f'|format(e.remaining_marriage) %}
                 <span class="pill {% if e.remaining_marriage<=2 %}pill-danger{% elif e.remaining_marriage<=5 %}pill-warn{% else %}pill-ok{% endif %}">{{ v }} 天</span>
               </a>
@@ -198,12 +197,12 @@
             <td>{{ '是' if e.suspend else '否' }}</td>
             <td class="nowrap">
               {% if e.is_active %}
-                <a href="{{ url_for('edit_employee', emp_id=e.id) }}?store_id={{ current_store_id or '' }}">編輯</a>
-                <a href="{{ url_for('list_insurance') }}?store_id={{ current_store_id or '' }}" class="muted" title="前往保險列表" style="margin-left:8px">保險</a>
-                <a href="{{ url_for('delete_employee', emp_id=e.id) }}?store_id={{ current_store_id or '' }}" style="margin-left:8px;color:var(--danger)" onclick="return confirm('確定要封存此員工？');">刪除</a>
+                <a href="{{ url_for('edit_employee', emp_id=e.id) }}?store_id={{ sid or '' }}">編輯</a>
+                <a href="{{ url_for('list_insurance') }}?store_id={{ sid or '' }}" class="muted" title="前往保險列表" style="margin-left:8px">保險</a>
+                <a href="{{ url_for('delete_employee', emp_id=e.id) }}?store_id={{ sid or '' }}" style="margin-left:8px;color:var(--danger)" onclick="return confirm('確定要封存此員工？');">刪除</a>
               {% else %}
                 <span class="muted">已離職</span>
-                <a href="{{ url_for('restore_employee', emp_id=e.id) }}?store_id={{ current_store_id or '' }}" style="margin-left:8px">復職</a>
+                <a href="{{ url_for('restore_employee', emp_id=e.id) }}?store_id={{ sid or '' }}" style="margin-left:8px">復職</a>
               {% endif %}
             </td>
           </tr>
@@ -283,12 +282,11 @@
       exportBtn?.addEventListener('click', exportCsv);
       applyFilter();
 
-      // 分店切換：改變 URL 的 store_id 參數並保留 all 參數
+      // 分店切換：更新 URL 的 store_id
       const select = document.getElementById('storeSelect');
       select?.addEventListener('change', () => {
         const params = new URLSearchParams(window.location.search);
         if (select.value) params.set('store_id', select.value); else params.delete('store_id');
-        // 保留 all 參數（顯示全部/在職）
         const url = '{{ url_for("index") }}' + (params.toString() ? ('?' + params.toString()) : '');
         window.location.href = url;
       });
