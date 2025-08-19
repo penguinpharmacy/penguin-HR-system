@@ -1,80 +1,101 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-Hant">
 <head>
   <meta charset="utf-8">
   <title>{{ name }} — {{ leave_type }} 紀錄</title>
-  <link href="/static/style.css" rel="stylesheet">
+  <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+  <style>
+    .pill{display:inline-block;padding:2px 8px;border-radius:9999px;background:#f1f5f9;font-size:12px}
+    .pill-ok{color:#16a34a}
+    .pill-warn{color:#f59e0b;background:#fff7ed}
+    .pill-danger{color:#dc2626;background:#fef2f2}
+    .btn{display:inline-block;border:1px solid #e5e7eb;background:#fff;border-radius:10px;padding:.35rem .6rem;font-size:14px}
+    .btn:hover{background:#f9fafb}
+    .btn-primary{color:#2563eb;border-color:#2563eb;background:#eff6ff}
+    .right{text-align:right}
+    .nowrap{white-space:nowrap}
+    .border{border:1px solid #e5e7eb;border-collapse:collapse;width:100%}
+    table th, table td{padding:.5rem .75rem;border-top:1px solid #e5e7eb;vertical-align:top}
+    thead th{background:#f9fafb;text-align:left}
+    .p-4{padding:1rem}
+    .mb-4{margin-bottom:1rem}
+    .mt-4{margin-top:1rem}
+    .w-28{width:7rem}
+    .text-blue-600{color:#2563eb}
+    .text-gray-600{color:#64748b}
+    .text-center{text-align:center}
+    .inline-block{display:inline-block}
+  </style>
 </head>
 <body class="p-4">
   <h1 class="text-2xl mb-4">{{ name }} — {{ leave_type }} 紀錄</h1>
   <a href="{{ url_for('index') }}" class="text-blue-600 mb-4 inline-block">← 返回總覽</a>
 
-  <!-- 直接在同一頁新增：改為「時數（小時）」、最小 0.5 -->
+  <!-- 新增紀錄（以小時為主，最小 0.5） -->
   <form action="{{ url_for('add_leave_record', emp_id=emp_id, leave_type=leave_type) }}"
         method="post"
-        class="mt-4 space-y-4">
-    <div>
+        class="mt-4">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
       <label>開始日期：
         <input type="date" name="start_date" required class="border px-2 py-1">
       </label>
-    </div>
-    <div>
       <label>結束日期：
         <input type="date" name="end_date" required class="border px-2 py-1">
       </label>
-    </div>
-    <div>
       <label>時數（小時，最小 0.5）：
         <input type="number" name="hours" step="0.5" min="0.5" required class="border px-2 py-1 w-28">
       </label>
-      <div class="text-sm text-gray-600 mt-1">提示：1 天 = 8 小時</div>
-    </div>
-    <div>
-      <label>備註：
-        <input type="text" name="note" class="border px-2 py-1 w-full" placeholder="可留空">
+      <label style="flex:1;min-width:220px">備註：
+        <input type="text" name="note" class="border px-2 py-1" style="width:100%" placeholder="可留空">
       </label>
+      <button type="submit" class="btn btn-primary">新增 {{ leave_type }} 紀錄</button>
     </div>
-    <button type="submit" class="px-4 py-2 bg-green-500 text-white rounded">
-      新增 {{ leave_type }} 紀錄
-    </button>
+    <div class="text-gray-600" style="margin-top:6px">提示：1 天 = 8 小時</div>
   </form>
 
-  <table class="min-w-full border mt-6">
+  <table class="border mt-4">
     <thead>
       <tr>
         <th>請假起</th>
         <th>請假迄</th>
-        <th>時數（小時）</th>
+        <th class="right">時數（小時）</th>
         <th>備註</th>
         <th>申請時間</th>
+        <th>狀態</th>
         <th>操作</th>
       </tr>
     </thead>
     <tbody>
       {% for r in records %}
-      <tr class="border-t">
-        <td>{{ r.start_date }}</td>
-        <td>{{ r.end_date }}</td>
+      <tr>
+        <td class="nowrap">{{ r.start_date }}</td>
+        <td class="nowrap">{{ r.end_date }}</td>
         <!-- 相容舊資料：若 r.hours 未提供，就用 r.days*8 顯示 -->
-        <td>{{ (r.hours if r.hours is defined else ((r.days or 0) * 8)) }}</td>
+        <td class="right">{{ (r.hours if r.hours is defined and r.hours is not none else ((r.days or 0) * 8)) }}</td>
         <td>{{ r.note }}</td>
-        <td>{{ r.created_at }}</td>
-        <td>
-          <a href="{{ url_for('edit_leave_record',
-                               emp_id=emp_id,
-                               leave_type=leave_type,
-                               record_id=r.id) }}"
-             class="text-blue-600">編輯</a>
+        <td class="nowrap">{{ r.created_at }}</td>
+        <td class="nowrap">
+          {% set s = (r.status or '待審核') %}
+          <span class="pill
+            {% if s == '核准' %}pill-ok
+            {% elif s == '退回' %}pill-danger
+            {% else %}pill-warn{% endif %}">
+            {{ s }}
+          </span>
+        </td>
+        <td class="nowrap">
+          <a href="{{ url_for('edit_leave_record', emp_id=emp_id, leave_type=leave_type, record_id=r.id) }}" class="text-blue-600">編輯</a>
+          {% if (r.status or '待審核') == '待審核' %}
+            <a href="{{ url_for('approve_leave', rec_id=r.id) }}" class="btn btn-primary" style="margin-left:6px">核准</a>
+            <a href="{{ url_for('reject_leave', rec_id=r.id) }}" class="btn" style="margin-left:6px;color:#dc2626">退回</a>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
       {% if records|length == 0 %}
-      <tr><td colspan="6" class="text-center py-4">尚無紀錄</td></tr>
+      <tr><td colspan="7" class="text-center" style="padding:16px">尚無紀錄</td></tr>
       {% endif %}
     </tbody>
   </table>
 </body>
 </html>
-
-
-
