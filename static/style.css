@@ -20,12 +20,23 @@ a:hover{text-decoration:underline}
 
 /* ====== Header（可共用到其他頁） ====== */
 .header{
-  display:flex; align-items:center; gap:12px;
+  position:sticky; top:0; z-index:1000;
+  display:flex; align-items:center; justify-content:space-between;
   padding:12px 20px; background:var(--brand);
   color:#fff; box-shadow:0 2px 6px rgba(0,0,0,.08);
 }
+
+/* 左側：Logo + 標題 */
+.header .logo-area{display:flex; align-items:center; gap:12px}
 .header img{height:40px; width:auto; display:block}
-.header h1{margin:0; font-size:18px; font-weight:800; letter-spacing:.3px}
+.header h1{margin:0; font-size:18px; font-weight:800; letter-spacing:.3px; color:#fff}
+
+/* 右側：導覽列 */
+.header .nav-links{display:flex; align-items:center; gap:16px}
+.header .nav-links a{
+  color:#fff; text-decoration:none; font-size:14px; font-weight:600; opacity:.95;
+}
+.header .nav-links a:hover{opacity:1; text-decoration:underline}
 
 /* ====== 容器、工具列 ====== */
 .container{max-width:1200px; margin:0 auto; padding:20px}
@@ -75,4 +86,6 @@ tbody tr:hover{background:#fcfcfd}
 @media (max-width:768px){
   .container{padding:14px}
   .header h1{font-size:16px}
+  .header .nav-links{gap:10px}
 }
+
