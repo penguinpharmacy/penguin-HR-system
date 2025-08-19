@@ -13,6 +13,7 @@ import psycopg
 import socket
 from urllib.parse import urlparse
 from types import SimpleNamespace
+import functools
 
 app = Flask(__name__)
 
@@ -120,7 +121,6 @@ def _form_hours_or_days(hours_name='hours', days_name='days') -> Decimal:
         return d * 8
     raise ValueError("請輸入請假時數")
 
-# === 新增：到職日制的週年與倒數計算 ===
 def _ensure_date(d):
     """DB 取出的若已是 date 就直接回傳；若是 str（YYYY-MM-DD）則轉換。"""
     if d is None:
@@ -135,18 +135,15 @@ def next_anniversary(start: date, today: date) -> date:
     處理 2/29 到職於非閏年以 2/28 代表。
     """
     if start.month == 2 and start.day == 29:
-        # 以當年是否閏年決定 2/29 或 2/28
         try_this = date(today.year, 2, 29)
         this_year_anniv = try_this if try_this.month == 2 and try_this.day == 29 else date(today.year, 2, 28)
     else:
-        # 一般情況可能拋 ValueError（極少見），則退到 2/28
         try:
             this_year_anniv = start.replace(year=today.year)
         except ValueError:
             this_year_anniv = date(today.year, 2, 28)
 
     if this_year_anniv <= today:
-        # 今年已過，取下一年
         ny = today.year + 1
         if start.month == 2 and start.day == 29:
             try_next = date(ny, 2, 29)
@@ -253,8 +250,34 @@ def init_db():
         """)
         conn.commit()
 
+# === 新增：從 leave_records 動態彙總各假別已用小時 ===
+def _fetch_leave_usage_hours(conn):
+    """
+    回傳格式：
+    {
+      emp_id: {
+        '病假': 小時(float),
+        '事假': 小時(float),
+        '婚假': 小時(float),
+        '特休': 小時(float),
+      },
+      ...
+    }
+    """
+    data = {}
+    with conn.cursor() as c:
+        c.execute("""
+            SELECT employee_id, leave_type, COALESCE(SUM(hours),0)
+              FROM leave_records
+             GROUP BY employee_id, leave_type
+        """)
+        for emp_id, ltype, hrs in c.fetchall():
+            d = data.setdefault(emp_id, {})
+            d[str(ltype)] = float(hrs or 0.0)
+    return data
+
 # -------------------------
-# 首頁：員工特休總覽（特休用小時呈現 + 調整）
+# 首頁：員工特休總覽（特休=小時；病/事/婚=依紀錄動態計算）
 # -------------------------
 @app.route('/')
 def index():
@@ -286,6 +309,9 @@ def index():
             ''')
         rows = c.fetchall()
 
+        # ★ 把所有請假紀錄的已用小時彙總起來
+        usage_map = _fetch_leave_usage_hours(conn)
+
     employees = []
     for (sid, name, sd, ed, dept, level, grade, base, allowance,
          suspend, used_days, ent_days,
@@ -293,12 +319,32 @@ def index():
          sick_ent, sick_used, per_ent, per_used, mar_ent, mar_used,
          is_active, adj_hours) in rows:
 
-        # 特休改用「小時」
+        # 特休：以小時為主
         ent_h_base = float(ent_hours) if ent_hours is not None else float((ent_days or 0) * 8)
         used_h     = float(used_hours) if used_hours is not None else float((used_days or 0) * 8)
-        # 套用調整值（可正可負）
         adj        = float(adj_hours or 0)
         ent_h      = max(ent_h_base + adj, 0.0)
+
+        # 讀彙總（小時）
+        u = usage_map.get(sid, {})
+        sick_used_hours     = float(u.get('病假', 0.0))
+        personal_used_hours = float(u.get('事假', 0.0))
+        marriage_used_hours = float(u.get('婚假', 0.0))
+        # 若要讓特休「已用」也改成以紀錄為準，可啟用下一行：
+        # used_h = float(u.get('特休', used_h))
+
+        # 以「天」呈現病/事/婚假剩餘（保留你原本 UI）
+        sick_ent_days      = int(sick_ent or 0)
+        personal_ent_days  = int(per_ent or 0)
+        marriage_ent_days  = int(mar_ent or 0)
+
+        sick_used_days     = sick_used_hours / 8.0
+        personal_used_days = personal_used_hours / 8.0
+        marriage_used_days = marriage_used_hours / 8.0
+
+        remaining_sick_days     = max(sick_ent_days - sick_used_days, 0.0)
+        remaining_personal_days = max(personal_ent_days - personal_used_days, 0.0)
+        remaining_marriage_days = max(marriage_ent_days - marriage_used_days, 0.0)
 
         # 年資
         ref_date = ed or sd
@@ -318,20 +364,27 @@ def index():
             'position_allowance': allowance,
             'years': years,
             'months': months,
-            # 小時制
+
+            # 特休（小時）
             'entitled': ent_h,
             'used': used_h,
             'remaining': max(ent_h - used_h, 0.0),
+
             'suspend': suspend,
-            'entitled_sick': sick_ent or 0,
-            'used_sick': sick_used or 0,
-            'remaining_sick': max((sick_ent or 0) - (sick_used or 0), 0),
-            'entitled_personal': per_ent or 0,
-            'used_personal': per_used or 0,
-            'remaining_personal': max((per_ent or 0) - (per_used or 0), 0),
-            'entitled_marriage': mar_ent or 0,
-            'used_marriage': mar_used or 0,
-            'remaining_marriage': max((mar_ent or 0) - (mar_used or 0), 0),
+
+            # 病/事/婚以「天」呈現（從歷史紀錄動態計算）
+            'entitled_sick': sick_ent_days,
+            'used_sick': sick_used_days,
+            'remaining_sick': remaining_sick_days,
+
+            'entitled_personal': personal_ent_days,
+            'used_personal': personal_used_days,
+            'remaining_personal': remaining_personal_days,
+
+            'entitled_marriage': marriage_ent_days,
+            'used_marriage': marriage_used_days,
+            'remaining_marriage': remaining_marriage_days,
+
             'is_active': is_active,
         })
 
@@ -755,7 +808,7 @@ def restore_employee(emp_id):
     return redirect(url_for('index', all='1'))
 
 # -------------------------
-# 新增：特休到期提醒（到職日制）
+# 特休到期提醒（到職日制）
 # -------------------------
 def _fetch_active_employees_for_expiry():
     """抓取在職員工與計算特休剩餘（小時）。"""
@@ -798,14 +851,11 @@ def _fetch_active_employees_for_expiry():
 
 @app.route('/alerts/leave-expiring')
 def leave_expiring():
-    """純 HTML 版列表（不新增模板也能用）。"""
     init_db()
     data = _fetch_active_employees_for_expiry()
-    # 過濾提醒視窗
     data = [d for d in data if 0 <= d["days_left"] <= ALERT_WINDOW_DAYS]
     data.sort(key=lambda x: x["days_left"])
 
-    # 簡易 HTML（與你現有 style.css 相容）
     html_rows = []
     for d in data:
         badge = ''
@@ -869,7 +919,6 @@ def leave_expiring():
 
 @app.route('/alerts/leave-expiring/json')
 def leave_expiring_json():
-    """JSON 版，方便 Dashboard 卡片數字或前端用 fetch 取用。"""
     init_db()
     data = _fetch_active_employees_for_expiry()
     data = [d for d in data if 0 <= d["days_left"] <= ALERT_WINDOW_DAYS]
@@ -887,3 +936,4 @@ def leave_expiring_json():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+
