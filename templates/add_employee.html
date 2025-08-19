@@ -7,16 +7,19 @@
 </head>
 <body class="p-4">
   <h1 class="text-2xl mb-4">新增員工</h1>
+
   <form action="/add" method="post" class="space-y-4">
-    <!-- 分店 -->
+    <!-- 分店（動態） -->
+    {% set current_store_id = request.args.get('store_id', type=int) %}
     <div>
       <label class="block">分店：</label>
-      <select name="branch" class="border px-2 py-1 w-full" required>
-        <option value="">請選擇分店</option>
-        <option value="penguin_pharmacy">企鵝藥局</option>
-        <option value="penguin_health">企鵝藥妝</option>
-        <!-- 之後有新分店再加 -->
+      <select name="store_id" class="border px-2 py-1 w-full">
+        <option value="" {% if not current_store_id %}selected{% endif %}>（未指定）</option>
+        {% for s in stores %}
+          <option value="{{ s[0] }}" {% if current_store_id == s[0] %}selected{% endif %}>{{ s[1] }}</option>
+        {% endfor %}
       </select>
+      <div class="text-xs text-gray-500 mt-1">※ 這個清單會自動帶入「分店管理」內啟用的分店（包含：江翠大藥局）。</div>
     </div>
 
     <!-- 基本資料 -->
@@ -69,9 +72,10 @@
     <div>
       <label class="block">已用特休（天）：</label>
       <input type="number" name="used_leave" value="0" min="0" class="border px-2 py-1 w-24">
+      <div class="text-xs text-gray-500 mt-1">（系統內部已改採小時制，這裡會自動換算為小時）</div>
     </div>
 
-    <!-- 其他假別 -->
+    <!-- 其他假別（權益會依年資自動算，這裡可留白或調整） -->
     <div>
       <label class="block">年假外可用病假（天）：</label>
       <input type="number" name="entitled_sick" value="0" min="0" class="border px-2 py-1 w-24">
