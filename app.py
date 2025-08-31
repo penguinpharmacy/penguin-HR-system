@@ -1255,7 +1255,9 @@ def _fetch_active_employees_for_expiry():
         sd = _ensure_date(sd)
         if not sd:
             continue
-        expiry = next_anniversary(sd, today)
+        first_expiry, final_expiry = compute_expiry_dates(sd, LEAVE_POLICY)
+        expiry = final_expiry or next_anniversary(sd, today)
+        
         entitled = max(float(ent_h or 0) + float(adj_h or 0), 0.0)
         used = float(used_h or 0)
         remaining = max(entitled - used, 0.0)
