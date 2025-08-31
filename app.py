@@ -510,6 +510,9 @@ def index():
 
         # 動態計算（只計 approved）
         u = usage_map.get(sid, {})
+        # 覆寫特休已用（小時）：以已核准假單加總為準
+        used_h = float(u.get('特休', used_h))
+
         sick_used_hours     = float(u.get('病假', 0.0))
         personal_used_hours = float(u.get('事假', 0.0))
         marriage_used_hours = float(u.get('婚假', 0.0))
