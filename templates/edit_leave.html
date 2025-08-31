@@ -42,6 +42,29 @@
         <input type="text" name="note" value="{{ note }}" class="border px-2 py-1 w-full">
       </label>
     </div>
+
+    <!-- 🔽 新增：到期與提醒區塊（不影響原有欄位） -->
+    <div class="border rounded p-4 bg-gray-50 mt-4">
+      <div class="font-semibold mb-2">到期與提醒</div>
+      <div class="text-sm text-gray-700 mb-2">
+        制度：<b>{{ policy_name }}</b>　
+        提醒視窗：<b>{{ reminder_window_days }}</b> 天
+      </div>
+
+      <div>
+        <label>最終到期日：
+          <input type="date" value="{{ expiry_date or '' }}" readonly class="border px-2 py-1 bg-gray-100">
+        </label>
+      </div>
+      <div>
+        <label>距到期剩餘天數：
+          <input type="text" value="{{ days_to_expiry if days_to_expiry is not none else '' }}"
+                 readonly class="border px-2 py-1 bg-gray-100 w-24">
+        </label>
+      </div>
+    </div>
+    <!-- 🔼 新增結束 -->
+
     <div>
       <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded">儲存修改</button>
       <a href="{{ url_for('leave_history', emp_id=emp_id, leave_type=leave_type) }}"
