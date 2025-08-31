@@ -204,16 +204,32 @@ def _add_months(d: date, months: int) -> date:
     return date(y, m, min(d.day, last))
 
 def compute_expiry_dates(grant_date: date, policy: str):
-    """回傳 (本期到期日, 最終到期日)。"""
+    """
+    回傳 (本期到期日, 最終到期日)。
+    - 曆年制：本期=當年12/31，最終=次年12/31
+    - 週年制：本期=入職+12個月-1天；最終=入職+(12+ANNIV_CARRYOVER_MONTHS)個月-1天
+              若 ANNIV_CARRYOVER_MONTHS=0 → 不遞延 → 最終=本期
+    """
     if not grant_date:
         return None, None
-    if policy == "calendar":   # 曆年制
+
+    if policy == "calendar":
         first_expiry = date(grant_date.year, 12, 31)
         final_expiry = date(grant_date.year + 1, 12, 31)
-    else:  # anniversary 週年制
+    else:  # anniversary
+        from calendar import monthrange
+        def _add_months(d, months):
+            y = d.year + (d.month - 1 + months) // 12
+            m = (d.month - 1 + months) % 12 + 1
+            last = monthrange(y, m)[1]
+            return date(y, m, min(d.day, last))
         first_expiry = _add_months(grant_date, 12) - timedelta(days=1)
-        final_expiry = _add_months(grant_date, 24) - timedelta(days=1)
+        if ANNIV_CARRYOVER_MONTHS > 0:
+            final_expiry = _add_months(grant_date, 12 + ANNIV_CARRYOVER_MONTHS) - timedelta(days=1)
+        else:
+            final_expiry = first_expiry
     return first_expiry, final_expiry
+
 
 
 # -------------------------
