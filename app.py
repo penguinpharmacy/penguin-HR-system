@@ -1116,6 +1116,10 @@ def edit_leave_record(emp_id, leave_type, record_id):
         ''', (record_id,))
         df, dt, hours, days, note = c.fetchone()
 
+    # 🔽 新增：到期與提醒計算
+    first_expiry, final_expiry = compute_expiry_dates(_ensure_date(df), LEAVE_POLICY)
+    days_left = (final_expiry - date.today()).days if final_expiry else None
+
     return render_template('edit_leave.html',
                            emp_id=emp_id,
                            leave_type=leave_type,
@@ -1124,7 +1128,13 @@ def edit_leave_record(emp_id, leave_type, record_id):
                            end_date  =dt.strftime('%Y-%m-%d'),
                            hours     =float(hours or 0),
                            days      =int(days or 0),
-                           note      =note or '')
+                           note      =note or '',
+                           # 新增給模板的變數
+                           policy_name="週年制" if LEAVE_POLICY=="anniversary" else "曆年制",
+                           reminder_window_days=ALERT_WINDOW_DAYS,
+                           expiry_date=final_expiry.isoformat() if final_expiry else "",
+                           days_to_expiry=days_left)
+
 
 @app.post('/history/<int:emp_id>/<leave_type>/approve/<int:record_id>')
 def approve_leave(emp_id, leave_type, record_id):
