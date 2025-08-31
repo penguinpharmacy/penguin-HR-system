@@ -190,6 +190,29 @@ def next_anniversary(start: date, today: date) -> date:
 def days_until(target: date, today: date) -> int:
     return (target - today).days
 
+from calendar import monthrange
+from datetime import timedelta
+
+def _add_months(d: date, months: int) -> date:
+    """日期加月，月底安全處理。"""
+    y = d.year + (d.month - 1 + months) // 12
+    m = (d.month - 1 + months) % 12 + 1
+    last = monthrange(y, m)[1]
+    return date(y, m, min(d.day, last))
+
+def compute_expiry_dates(grant_date: date, policy: str):
+    """回傳 (本期到期日, 最終到期日)。"""
+    if not grant_date:
+        return None, None
+    if policy == "calendar":   # 曆年制
+        first_expiry = date(grant_date.year, 12, 31)
+        final_expiry = date(grant_date.year + 1, 12, 31)
+    else:  # anniversary 週年制
+        first_expiry = _add_months(grant_date, 12) - timedelta(days=1)
+        final_expiry = _add_months(grant_date, 24) - timedelta(days=1)
+    return first_expiry, final_expiry
+
+
 # -------------------------
 # 資料表初始化/升級（含分店、部門、審核欄位、審計表）
 # -------------------------
