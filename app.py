@@ -1243,7 +1243,7 @@ def restore_employee(emp_id):
 # 特休到期提醒（到職日制）
 # -------------------------
 def _fetch_active_employees_for_expiry():
-    """抓取在職員工與計算特休剩餘（小時）。"""
+    """抓取在職員工與計算特休剩餘（小時），並給出『最終到期日』（週年制=入職+24個月-1天）。"""
     with get_conn() as conn, conn.cursor() as c:
         c.execute('''
             SELECT
@@ -1265,14 +1265,17 @@ def _fetch_active_employees_for_expiry():
         sd = _ensure_date(sd)
         if not sd:
             continue
+
+        # 🔽 週年制：用 compute_expiry_dates 計算；以「最終到期日」為提醒基準
         first_expiry, final_expiry = compute_expiry_dates(sd, LEAVE_POLICY)
-        expiry = final_expiry or next_anniversary(sd, today)
-        
+        expiry = final_expiry or next_anniversary(sd, today)  # 沒算到時退回原本周年日
+
         entitled = max(float(ent_h or 0) + float(adj_h or 0), 0.0)
         used = float(used_h or 0)
         remaining = max(entitled - used, 0.0)
         if remaining <= 0:
             continue
+
         result.append({
             "id": eid,
             "name": name,
@@ -1282,6 +1285,7 @@ def _fetch_active_employees_for_expiry():
             "remain_hours": round(remaining, 1)
         })
     return result
+
 
 @app.route('/alerts/leave-expiring')
 def leave_expiring():
