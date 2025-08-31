@@ -27,6 +27,9 @@ ALERT_WINDOW_DAYS = int(os.environ.get("LEAVE_EXPIRY_ALERT_DAYS", "60"))
 # 制度設定：calendar=曆年制 / anniversary=週年制
 LEAVE_POLICY = os.environ.get("LEAVE_POLICY", "anniversary")
 
+# 週年制遞延（月數）：0 = 不遞延（到期折現）；12 = 遞延一年
+ANNIV_CARRYOVER_MONTHS = int(os.environ.get("ANNIV_CARRYOVER_MONTHS", "0"))
+
 # ========== 基本認證（可關閉：不設定 ADMIN_USER/PASS 即停用） ==========
 ADMIN_USER = os.environ.get('ADMIN_USER')
 ADMIN_PASS = os.environ.get('ADMIN_PASS')
