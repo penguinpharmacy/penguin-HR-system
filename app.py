@@ -1082,18 +1082,21 @@ def add_leave_record(emp_id, leave_type):
         with get_conn() as conn, conn.cursor() as c:
             c.execute('''
                 INSERT INTO leave_records
-                  (employee_id, leave_type, date_from, date_to, hours, days, note, status, created_by)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                  (employee_id, leave_type, date_from, date_to, hours, days, note, status, created_by, approved_by, approved_at)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,'approved',%s,%s,NOW())
                 RETURNING id
-            ''', (emp_id, leave_type, df, dt, str(hours), days_int, note, 'pending', getattr(g,'current_user', None)))
+            ''', (emp_id, leave_type, df, dt, str(hours), days_int, note,
+                  getattr(g,'current_user', None), getattr(g,'current_user', None)))
             rid = c.fetchone()[0]
             conn.commit()
             write_audit(conn, 'leave_records', rid, 'insert', None, {
-                'employee_id': emp_id, 'leave_type': leave_type, 'hours': float(hours), 'note': note, 'status':'pending'
+                'employee_id': emp_id, 'leave_type': leave_type,
+                'hours': float(hours), 'note': note, 'status':'approved'
             })
         return redirect(url_for('leave_history', emp_id=emp_id, leave_type=leave_type))
 
     return render_template('add_leave.html', emp_id=emp_id, leave_type=leave_type)
+
 
 @app.route('/history/<int:emp_id>/<leave_type>/edit/<int:record_id>', methods=['GET','POST'])
 def edit_leave_record(emp_id, leave_type, record_id):
@@ -1106,24 +1109,29 @@ def edit_leave_record(emp_id, leave_type, record_id):
         days_int = int(hours // 8)
 
         with get_conn() as conn, conn.cursor() as c:
-            c.execute('SELECT date_from, date_to, hours, days, note FROM leave_records WHERE id=%s', (record_id,))
-            bdf, bdt, bhrs, bdays, bnote = c.fetchone()
+            c.execute('SELECT date_from, date_to, hours, days, note, status FROM leave_records WHERE id=%s', (record_id,))
+            bdf, bdt, bhrs, bdays, bnote, bstatus = c.fetchone()
 
             c.execute('''
                 UPDATE leave_records
-                   SET date_from = %s,
-                       date_to   = %s,
-                       hours     = %s,
-                       days      = %s,
-                       note      = %s
+                   SET date_from   = %s,
+                       date_to     = %s,
+                       hours       = %s,
+                       days        = %s,
+                       note        = %s,
+                       status      = 'approved',
+                       approved_by = %s,
+                       approved_at = NOW()
                  WHERE id = %s
-            ''', (df, dt, str(hours), days_int, note, record_id))
+            ''', (df, dt, str(hours), days_int, note, getattr(g,'current_user', None), record_id))
             conn.commit()
             write_audit(conn, 'leave_records', record_id, 'update', {
                 'date_from': bdf.strftime('%Y-%m-%d'), 'date_to': bdt.strftime('%Y-%m-%d'),
-                'hours': float(bhrs or 0), 'days': int(bdays or 0), 'note': bnote or ''
+                'hours': float(bhrs or 0), 'days': int(bdays or 0),
+                'note': bnote or '', 'status': bstatus or ''
             }, {
-                'date_from': df, 'date_to': dt, 'hours': float(hours), 'days': days_int, 'note': note
+                'date_from': df, 'date_to': dt, 'hours': float(hours),
+                'days': days_int, 'note': note, 'status': 'approved'
             })
         return redirect(url_for('leave_history', emp_id=emp_id, leave_type=leave_type))
 
@@ -1135,7 +1143,7 @@ def edit_leave_record(emp_id, leave_type, record_id):
         ''', (record_id,))
         df, dt, hours, days, note = c.fetchone()
 
-    # 🔽 新增：到期與提醒計算
+    # （以下是你原本 + 到期提示變數；若你還沒加 compute_expiry_dates，可刪掉這 4 行）
     first_expiry, final_expiry = compute_expiry_dates(_ensure_date(df), LEAVE_POLICY)
     days_left = (final_expiry - date.today()).days if final_expiry else None
 
@@ -1148,7 +1156,6 @@ def edit_leave_record(emp_id, leave_type, record_id):
                            hours     =float(hours or 0),
                            days      =int(days or 0),
                            note      =note or '',
-                           # 新增給模板的變數
                            policy_name="週年制" if LEAVE_POLICY=="anniversary" else "曆年制",
                            reminder_window_days=ALERT_WINDOW_DAYS,
                            expiry_date=final_expiry.isoformat() if final_expiry else "",
