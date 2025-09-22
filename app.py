@@ -506,14 +506,12 @@ def index():
 
         # 特休（小時制）
         ent_h_base = float(ent_hours) if ent_hours is not None else float((ent_days or 0) * 8)
-        used_h     = float(used_hours) if used_hours is not None else float((used_days or 0) * 8)
         adj        = float(adj_hours or 0)
         ent_h      = max(ent_h_base + adj, 0.0)
 
-        # 動態計算（只計 approved）
+        # 動態計算（只計 approved & 未刪），完全以流水帳為準，不看 employees 的舊欄位
         u = usage_map.get(sid, {})
-        # 覆寫特休已用（小時）：以已核准假單加總為準
-        used_h = float(u.get('特休', used_h))
+        used_h = float(u.get('特休', 0.0))
 
         sick_used_hours     = float(u.get('病假', 0.0))
         personal_used_hours = float(u.get('事假', 0.0))
