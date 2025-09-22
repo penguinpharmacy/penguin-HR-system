@@ -1,7 +1,4 @@
 from datetime import date, datetime
-from flask_sqlalchemy import SQLAlchemy
-
-db = SQLAlchemy()
 
 # ---------------------------
 # 工具函式：計算年資與各種假別
