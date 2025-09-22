@@ -83,13 +83,32 @@
             {{ s }}
           </span>
         </td>
-        <td class="nowrap">
-          <a href="{{ url_for('edit_leave_record', emp_id=emp_id, leave_type=leave_type, record_id=r.id) }}" class="text-blue-600">編輯</a>
-          {% if (r.status or '待審核') == '待審核' %}
-            <a href="{{ url_for('approve_leave', rec_id=r.id) }}" class="btn btn-primary" style="margin-left:6px">核准</a>
-            <a href="{{ url_for('reject_leave', rec_id=r.id) }}" class="btn" style="margin-left:6px;color:#dc2626">退回</a>
-          {% endif %}
-        </td>
+<td class="nowrap">
+  <a href="{{ url_for('edit_leave_record', emp_id=emp_id, leave_type=leave_type, record_id=r.id) }}" class="text-blue-600">編輯</a>
+  {% if (r.status or '待審核') == '待審核' %}
+    <a href="{{ url_for('approve_leave', rec_id=r.id) }}" class="btn btn-primary" style="margin-left:6px">核准</a>
+    <a href="{{ url_for('reject_leave', rec_id=r.id) }}" class="btn" style="margin-left:6px;color:#dc2626">退回</a>
+  {% endif %}
+
+  <!-- 新增：作廢 -->
+  <form action="{{ url_for('cancel_leave_record', emp_id=emp_id, leave_type=leave_type, record_id=r.id) }}"
+        method="post" style="display:inline;">
+    <button type="submit" onclick="return confirm('確定要將這筆紀錄作廢嗎？');"
+            class="btn" style="margin-left:6px;color:#f59e0b">
+      作廢
+    </button>
+  </form>
+
+  <!-- 新增：刪除 -->
+  <form action="{{ url_for('delete_leave_record', emp_id=emp_id, leave_type=leave_type, record_id=r.id) }}"
+        method="post" style="display:inline;">
+    <button type="submit" onclick="return confirm('⚠️ 確定要刪除這筆紀錄嗎？刪除後無法復原');"
+            class="btn" style="margin-left:6px;background-color:#dc2626;color:white">
+      刪除
+    </button>
+  </form>
+</td>
+
       </tr>
       {% endfor %}
       {% if records|length == 0 %}
