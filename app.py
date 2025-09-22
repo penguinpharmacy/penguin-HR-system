@@ -1185,6 +1185,7 @@ def approve_leave(emp_id, leave_type, record_id):
         write_audit(conn, 'leave_records', record_id, 'approve', before, {'status':'approved'})
     return redirect(url_for('leave_history', emp_id=emp_id, leave_type=leave_type))
 
+
 @app.post('/history/<int:emp_id>/<leave_type>/reject/<int:record_id>')
 def reject_leave(emp_id, leave_type, record_id):
     init_db()
@@ -1202,6 +1203,50 @@ def reject_leave(emp_id, leave_type, record_id):
         conn.commit()
         write_audit(conn, 'leave_records', record_id, 'reject', before, {'status':'rejected'})
     return redirect(url_for('leave_history', emp_id=emp_id, leave_type=leave_type))
+
+
+@app.post('/history/<int:emp_id>/<leave_type>/cancel/<int:record_id>')
+def cancel_leave_record(emp_id, leave_type, record_id):
+    """作廢：僅更新 status=canceled，不列入特休扣抵"""
+    init_db()
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute("SELECT status, deleted FROM leave_records WHERE id=%s", (record_id,))
+        row = c.fetchone()
+        if not row:
+            return abort(404)
+        before = {'status': row[0], 'deleted': row[1]}
+        c.execute("""
+          UPDATE leave_records
+             SET status='canceled',
+                 approved_by=%s,
+                 approved_at=NOW()
+           WHERE id=%s
+        """, (getattr(g,'current_user', None), record_id))
+        conn.commit()
+        write_audit(conn, 'leave_records', record_id, 'cancel', before, {'status': 'canceled'})
+    return redirect(url_for('leave_history', emp_id=emp_id, leave_type=leave_type))
+
+
+@app.post('/history/<int:emp_id>/<leave_type>/delete/<int:record_id>')
+def delete_leave_record(emp_id, leave_type, record_id):
+    """刪除（軟刪）：deleted=true，不列入任何計算"""
+    init_db()
+    with get_conn() as conn, conn.cursor() as c:
+        c.execute("SELECT status, deleted FROM leave_records WHERE id=%s", (record_id,))
+        row = c.fetchone()
+        if not row:
+            return abort(404)
+        before = {'status': row[0], 'deleted': row[1]}
+        c.execute("""
+          UPDATE leave_records
+             SET deleted=TRUE,
+                 deleted_at=NOW()
+           WHERE id=%s
+        """, (record_id,))
+        conn.commit()
+        write_audit(conn, 'leave_records', record_id, 'delete', before, {'deleted': True})
+    return redirect(url_for('leave_history', emp_id=emp_id, leave_type=leave_type))
+
 
 # -------------------------
 # 薪資/保險明細
