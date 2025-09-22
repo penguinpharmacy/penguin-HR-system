@@ -411,24 +411,22 @@ def write_audit(conn, table, row_id, action, before_obj=None, after_obj=None, ac
 def _fetch_leave_usage_hours(conn):
     """
     回傳格式：
-    {
-      emp_id: { '病假': 小時, '事假': 小時, '婚假': 小時, '特休': 小時 },
-      ...
-    }
-    （只統計 status='approved'）
+    { emp_id: { '病假': 小時, '事假': 小時, '婚假': 小時, '特休': 小時 }, ... }
+    只統計：status='approved' AND deleted=false
     """
     data = {}
     with conn.cursor() as c:
         c.execute("""
             SELECT employee_id, leave_type, COALESCE(SUM(hours),0)
               FROM leave_records
-             WHERE status='approved'
+             WHERE status='approved' AND COALESCE(deleted,FALSE)=FALSE
              GROUP BY employee_id, leave_type
         """)
         for emp_id, ltype, hrs in c.fetchall():
             d = data.setdefault(emp_id, {})
             d[str(ltype)] = float(hrs or 0.0)
     return data
+
 
 # -------------------------
 # 首頁：員工特休總覽（分店過濾 + 分頁）
