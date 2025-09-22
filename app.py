@@ -504,14 +504,24 @@ def index():
          sick_ent, sick_used, per_ent, per_used, mar_ent, mar_used,
          is_active, adj_hours, store_id, store_name) in rows:
 
-        # 特休（小時制）
-        ent_h_base = float(ent_hours) if ent_hours is not None else float((ent_days or 0) * 8)
-        adj        = float(adj_hours or 0)
-        ent_h      = max(ent_h_base + adj, 0.0)
+        # ✅ 依「現在年資」即時計算應特休（忽略 employees 的舊欄位）
+        #   在職者：用 start_date 算到今天；離職者：保守沿用資料表舊值（避免影響歷史結算）
+        if ed:
+            # 已離職 → 沿用資料表欄位
+            ent_h_base = float(ent_hours) if ent_hours is not None else float((ent_days or 0) * 8)
+        else:
+            sd_safe = _ensure_date(sd)
+            yy, mm = calculate_seniority(sd_safe)
+            ent_days_now = entitled_leave_days(yy, mm, suspend)  # 0/3/7/10/14/15...（天）
+            ent_h_base = float(ent_days_now) * 8.0
 
-        # 動態計算（只計 approved & 未刪），完全以流水帳為準，不看 employees 的舊欄位
+        adj   = float(adj_hours or 0)
+        ent_h = max(ent_h_base + adj, 0.0)
+
+        # ✅ 已用特休一律以流水帳彙總（approved 且未刪），不看 employees 舊欄位
         u = usage_map.get(sid, {})
         used_h = float(u.get('特休', 0.0))
+
 
         sick_used_hours     = float(u.get('病假', 0.0))
         personal_used_hours = float(u.get('事假', 0.0))
