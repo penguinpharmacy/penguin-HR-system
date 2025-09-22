@@ -320,7 +320,7 @@ def init_db():
         c.execute("ALTER SEQUENCE insurances_id_seq OWNED BY insurances.id;")
         conn.commit()
 
-        # ========== leave_records（加入 hours + 審核欄位） ==========
+        # ========== leave_records（加入 hours + 審核欄位 + 軟刪） ==========
         c.execute('''
             CREATE TABLE IF NOT EXISTS leave_records (
               id           SERIAL PRIMARY KEY,
@@ -332,10 +332,12 @@ def init_db():
               hours        NUMERIC(8,1),
               note         TEXT,
               created_at   TIMESTAMP DEFAULT NOW(),
-              status       TEXT DEFAULT 'approved', -- pending/approved/rejected
+              status       TEXT DEFAULT 'approved', -- pending/approved/rejected/canceled
               created_by   TEXT,
               approved_by  TEXT,
-              approved_at  TIMESTAMP
+              approved_at  TIMESTAMP,
+              deleted      BOOLEAN DEFAULT FALSE,
+              deleted_at   TIMESTAMP
             );
         ''')
         c.execute("ALTER TABLE leave_records ADD COLUMN IF NOT EXISTS hours NUMERIC(8,1);")
@@ -343,6 +345,8 @@ def init_db():
         c.execute("ALTER TABLE leave_records ADD COLUMN IF NOT EXISTS created_by TEXT;")
         c.execute("ALTER TABLE leave_records ADD COLUMN IF NOT EXISTS approved_by TEXT;")
         c.execute("ALTER TABLE leave_records ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP;")
+        c.execute("ALTER TABLE leave_records ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE;")
+        c.execute("ALTER TABLE leave_records ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;")
         c.execute("UPDATE leave_records SET status = COALESCE(status, 'approved');")
         conn.commit()
 
